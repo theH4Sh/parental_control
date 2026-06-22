@@ -1,16 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:usage_stats/usage_stats.dart';
 
-import 'firebase_service.dart';
+import 'api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 
@@ -31,7 +29,9 @@ class MyApp extends StatelessWidget {
         ),
         cardTheme: CardThemeData(
           color: const Color(0xFF1E1F29),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           elevation: 4,
         ),
       ),
@@ -67,9 +67,11 @@ class _MyHomePageState extends State<MyHomePage> {
   bool hasPermission = false;
   bool isLoading = true;
   Timer? _pollTimer;
-  static const MethodChannel _channel = MethodChannel('com.example.parental_control_app/usage');
+  static const MethodChannel _channel = MethodChannel(
+    'com.example.parental_control_app/usage',
+  );
 
-  String? userId;
+  String? deviceId;
   String syncStatus = 'idle'; // 'idle', 'syncing', 'synced', 'error'
   DateTime? lastSynced;
 
@@ -85,14 +87,15 @@ class _MyHomePageState extends State<MyHomePage> {
     super.dispose();
   }
 
-  Future<void> initFirebase() async {
+  Future<void> initBackend() async {
     try {
-      final user = await AppFirebaseService.instance.signInAnonymously();
+      final id = await ApiService.instance.init();
+      debugPrint("🔑 Backend device ID: $id");
       setState(() {
-        userId = user?.uid;
+        deviceId = id;
       });
     } catch (e) {
-      debugPrint('Failed to initialize Firebase Auth: $e');
+      debugPrint('Failed to initialize backend: $e');
       setState(() {
         syncStatus = 'error';
       });
@@ -100,7 +103,7 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   Future<void> initPermissionsAndStart() async {
-    await initFirebase();
+    await initBackend();
     if (!Platform.isAndroid) {
       setState(() {
         isLoading = false;
@@ -178,7 +181,10 @@ class _MyHomePageState extends State<MyHomePage> {
         return;
       }
 
-      final List<dynamic> details = await _channel.invokeMethod('getAppDetails', packageNames);
+      final List<dynamic> details = await _channel.invokeMethod(
+        'getAppDetails',
+        packageNames,
+      );
       final detailMap = <String, Map<String, Object?>>{};
       for (final item in details.cast<Map<dynamic, dynamic>>()) {
         final packageName = item['packageName'] as String;
@@ -188,25 +194,22 @@ class _MyHomePageState extends State<MyHomePage> {
         };
       }
 
-      final usageItems = activeTotals.entries
-          .map((entry) {
-            final detail = detailMap[entry.key];
-            return _AppUsage(
-              packageName: entry.key,
-              displayName: detail?['appName'] as String? ?? entry.key,
-              iconBytes: detail?['icon'] as Uint8List?,
-              totalMs: entry.value,
-            );
-          })
-          .toList()
-        ..sort((a, b) => b.totalMs.compareTo(a.totalMs));
+      final usageItems = activeTotals.entries.map((entry) {
+        final detail = detailMap[entry.key];
+        return _AppUsage(
+          packageName: entry.key,
+          displayName: detail?['appName'] as String? ?? entry.key,
+          iconBytes: detail?['icon'] as Uint8List?,
+          totalMs: entry.value,
+        );
+      }).toList()..sort((a, b) => b.totalMs.compareTo(a.totalMs));
 
       setState(() {
         usages = usageItems;
         isLoading = false;
       });
-      if (userId != null && usageItems.isNotEmpty) {
-        syncToFirebase();
+      if (deviceId != null && usageItems.isNotEmpty) {
+        syncToBackend();
       }
     } catch (e, stack) {
       debugPrint('Error loading usage stats: $e\n$stack');
@@ -217,20 +220,24 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  Future<void> syncToFirebase() async {
-    if (userId == null) return;
+  Future<void> syncToBackend() async {
+    if (deviceId == null) return;
     setState(() {
       syncStatus = 'syncing';
     });
     try {
-      final data = usages.map((u) => {
-        'packageName': u.packageName,
-        'displayName': u.displayName,
-        'totalMs': u.totalMs,
-      }).toList();
+      final data = usages
+          .map(
+            (u) => {
+              'packageName': u.packageName,
+              'displayName': u.displayName,
+              'totalMs': u.totalMs,
+            },
+          )
+          .toList();
 
-      await AppFirebaseService.instance.syncUsageStats(
-        userId: userId!,
+      await ApiService.instance.syncUsageStats(
+        deviceId: deviceId!,
         usageData: data,
       );
 
@@ -239,7 +246,7 @@ class _MyHomePageState extends State<MyHomePage> {
         lastSynced = DateTime.now();
       });
     } catch (e) {
-      debugPrint('Failed to sync to firebase: $e');
+      debugPrint('Failed to sync to backend: $e');
       setState(() {
         syncStatus = 'error';
       });
@@ -259,7 +266,11 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Colors.transparent,
         title: Text(
           widget.title,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.white),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: Colors.white,
+          ),
         ),
         actions: [
           if (hasPermission)
@@ -278,42 +289,45 @@ class _MyHomePageState extends State<MyHomePage> {
         child: !hasPermission
             ? _buildPermissionDeniedView()
             : isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8906)),
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8906)),
+                ),
+              )
+            : usages.isEmpty
+            ? _buildEmptyView()
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDashboardHeader(totalMs, totalApps, topApp),
+                  _buildSyncStatusCard(),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 12.0,
                     ),
-                  )
-                : usages.isEmpty
-                    ? _buildEmptyView()
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildDashboardHeader(totalMs, totalApps, topApp),
-                          _buildSyncStatusCard(),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                            child: Text(
-                              'App Usage Details',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                              itemCount: usages.length,
-                              itemBuilder: (context, index) {
-                                final app = usages[index];
-                                final percent = app.totalMs / maxMs;
-                                return _buildAppUsageCard(app, percent);
-                              },
-                            ),
-                          ),
-                        ],
+                    child: Text(
+                      'App Usage Details',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      itemCount: usages.length,
+                      itemBuilder: (context, index) {
+                        final app = usages[index];
+                        final percent = app.totalMs / maxMs;
+                        return _buildAppUsageCard(app, percent);
+                      },
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -330,7 +344,10 @@ class _MyHomePageState extends State<MyHomePage> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1E1F29),
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFFF8906).withValues(alpha: 0.2), width: 3),
+                border: Border.all(
+                  color: const Color(0xFFFF8906).withValues(alpha: 0.2),
+                  width: 3,
+                ),
               ),
               child: const Icon(
                 Icons.security_outlined,
@@ -363,7 +380,10 @@ class _MyHomePageState extends State<MyHomePage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF8906),
                 foregroundColor: const Color(0xFF0F0E17),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -412,10 +432,7 @@ class _MyHomePageState extends State<MyHomePage> {
             const Text(
               'No application usage has been recorded in the last 24 hours.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: Color(0xFFA7A9BE),
-              ),
+              style: TextStyle(fontSize: 15, color: Color(0xFFA7A9BE)),
             ),
           ],
         ),
@@ -473,10 +490,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ),
                   const Text(
                     'Total Screen Time',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFFA7A9BE),
-                    ),
+                    style: TextStyle(fontSize: 14, color: Color(0xFFA7A9BE)),
                   ),
                 ],
               ),
@@ -574,7 +588,9 @@ class _MyHomePageState extends State<MyHomePage> {
                         )
                       : Center(
                           child: Text(
-                            app.displayName.isNotEmpty ? app.displayName[0].toUpperCase() : '?',
+                            app.displayName.isNotEmpty
+                                ? app.displayName[0].toUpperCase()
+                                : '?',
                             style: const TextStyle(
                               color: Color(0xFFFF8906),
                               fontSize: 20,
@@ -639,10 +655,7 @@ class _MyHomePageState extends State<MyHomePage> {
               borderRadius: BorderRadius.circular(4),
               child: Stack(
                 children: [
-                  Container(
-                    height: 8,
-                    color: const Color(0xFF0F0E17),
-                  ),
+                  Container(height: 8, color: const Color(0xFF0F0E17)),
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 500),
                     height: 8,
@@ -704,7 +717,9 @@ class _MyHomePageState extends State<MyHomePage> {
                     height: 24,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8906)),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFFFF8906),
+                      ),
                     ),
                   )
                 : Icon(statusIcon, color: statusColor, size: 24),
@@ -731,7 +746,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                     ),
                   ],
-                  if (userId != null) ...[
+                  if (deviceId != null) ...[
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -739,12 +754,14 @@ class _MyHomePageState extends State<MyHomePage> {
                           'Device ID: ',
                           style: TextStyle(
                             fontSize: 10,
-                            color: const Color(0xFFA7A9BE).withValues(alpha: 0.7),
+                            color: const Color(
+                              0xFFA7A9BE,
+                            ).withValues(alpha: 0.7),
                           ),
                         ),
                         Expanded(
                           child: Text(
-                            userId!,
+                            deviceId!,
                             style: const TextStyle(
                               fontSize: 10,
                               fontFamily: 'monospace',
@@ -756,7 +773,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         const SizedBox(width: 4),
                         GestureDetector(
                           onTap: () {
-                            Clipboard.setData(ClipboardData(text: userId!));
+                            Clipboard.setData(ClipboardData(text: deviceId!));
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                 content: Text('Device ID copied to clipboard!'),
@@ -776,11 +793,11 @@ class _MyHomePageState extends State<MyHomePage> {
                 ],
               ),
             ),
-            if (syncStatus != 'syncing' && userId != null)
+            if (syncStatus != 'syncing' && deviceId != null)
               IconButton(
                 icon: const Icon(Icons.cloud_sync, color: Color(0xFFFF8906)),
                 onPressed: () {
-                  syncToFirebase();
+                  syncToBackend();
                 },
                 tooltip: 'Sync now',
               ),
