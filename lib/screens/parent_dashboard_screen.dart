@@ -1,6 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../api_service.dart';
+
+String _formatMs(int ms) {
+  final duration = Duration(milliseconds: ms);
+  final hours = duration.inHours;
+  final minutes = duration.inMinutes.remainder(60);
+
+  if (hours > 0) {
+    return '${hours}h ${minutes}m';
+  } else if (minutes > 0) {
+    return '${minutes}m';
+  } else {
+    final secs = duration.inSeconds.remainder(60);
+    return '${secs}s';
+  }
+}
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -13,26 +30,44 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   List<Map<String, dynamic>> children = [];
   bool isLoading = true;
   String? errorMessage;
+  DateTime? lastUpdated;
+  Timer? _liveRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     loadChildren();
+    _liveRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => loadChildren(silent: true),
+    );
   }
 
-  Future<void> loadChildren() async {
-    setState(() {
-      isLoading = true;
-      errorMessage = null;
-    });
+  @override
+  void dispose() {
+    _liveRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> loadChildren({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+    }
 
     try {
-      final list = await AuthService.instance.getChildren();
+      final summary = await ApiService.instance.getChildrenUsageSummary();
+      final list = (summary['children'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      if (!mounted) return;
       setState(() {
         children = list;
+        lastUpdated = DateTime.now();
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted || silent) return;
       setState(() {
         errorMessage = e.toString().replaceFirst('Exception: ', '');
         isLoading = false;
@@ -267,6 +302,42 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           ],
         ),
         actions: [
+          if (lastUpdated != null && children.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2ECC71).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF2ECC71).withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF2ECC71),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Live',
+                        style: TextStyle(
+                          color: Color(0xFF2ECC71),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFFFF8906)),
             onPressed: loadChildren,
@@ -378,6 +449,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         final String childName = child['username'] ?? 'Unknown';
         final String childEmail = child['email'] ?? '';
         final String? childDeviceId = child['deviceId'];
+        final Map<String, dynamic>? usage = child['usage'] as Map<String, dynamic>?;
+        final int totalScreenTimeMs = usage?['totalScreenTimeMs'] as int? ?? 0;
+        final List<dynamic> apps = usage?['apps'] ?? [];
+        final String? topAppName = apps.isNotEmpty
+            ? (apps.first['displayName'] as String?)
+            : null;
 
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
@@ -395,70 +472,159 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F0E17),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: (childDeviceId != null ? const Color(0xFF2ECC71) : const Color(0xFFA7A9BE)).withValues(alpha: 0.3),
-                        width: 2,
-                      ),
-                    ),
-                    child: Center(
-                      child: Text(
-                        childName.isNotEmpty ? childName[0].toUpperCase() : '?',
-                        style: const TextStyle(
-                          color: Color(0xFFFF8906),
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                  Row(
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F0E17),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: (childDeviceId != null ? const Color(0xFF2ECC71) : const Color(0xFFA7A9BE)).withValues(alpha: 0.3),
+                            width: 2,
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          childName,
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          childEmail,
-                          style: const TextStyle(color: Color(0xFFA7A9BE), fontSize: 13),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: childDeviceId != null ? const Color(0xFF2ECC71) : const Color(0xFFE53170),
-                                shape: BoxShape.circle,
-                              ),
+                        child: Center(
+                          child: Text(
+                            childName.isNotEmpty ? childName[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              color: Color(0xFFFF8906),
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
                             ),
-                            const SizedBox(width: 6),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              childDeviceId != null ? 'Linked Device Active' : 'No Device Linked',
-                              style: TextStyle(
-                                color: childDeviceId != null ? const Color(0xFF2ECC71) : const Color(0xFFE53170),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              childName,
+                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              childEmail,
+                              style: const TextStyle(color: Color(0xFFA7A9BE), fontSize: 13),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: childDeviceId != null ? const Color(0xFF2ECC71) : const Color(0xFFE53170),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  childDeviceId != null ? 'Linked Device Active' : 'No Device Linked',
+                                  style: TextStyle(
+                                    color: childDeviceId != null ? const Color(0xFF2ECC71) : const Color(0xFFE53170),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Color(0xFFA7A9BE), size: 28),
+                    ],
                   ),
-                  const Icon(Icons.chevron_right_rounded, color: Color(0xFFA7A9BE), size: 28),
+                  if (childDeviceId != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F0E17),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                      ),
+                      child: usage != null
+                          ? Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE53170).withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.schedule_rounded,
+                                    color: Color(0xFFE53170),
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _formatMs(totalScreenTimeMs),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Text(
+                                        topAppName != null
+                                            ? 'Today · Top app: $topAppName'
+                                            : 'Today\'s screen time',
+                                        style: const TextStyle(
+                                          color: Color(0xFFA7A9BE),
+                                          fontSize: 12,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (apps.isNotEmpty)
+                                  Text(
+                                    '${apps.length} apps',
+                                    style: const TextStyle(
+                                      color: Color(0xFFFF8906),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : const Row(
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8906)),
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Waiting for usage stats...',
+                                    style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -488,14 +654,25 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
   String? errorMessage;
   List<Map<String, dynamic>> dailyReports = [];
   Map<String, dynamic>? selectedReport;
+  Timer? _liveRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     fetchStats();
+    _liveRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => fetchStats(silent: true),
+    );
   }
 
-  Future<void> fetchStats() async {
+  @override
+  void dispose() {
+    _liveRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> fetchStats({bool silent = false}) async {
     if (widget.deviceId == null) {
       setState(() {
         isLoading = false;
@@ -503,40 +680,37 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
       return;
     }
 
-    setState(() {
-      isLoading = true;
-      errorMessage = null;
-    });
+    if (!silent) {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+    }
 
     try {
       final list = await ApiService.instance.getUsageStats(widget.deviceId!);
+      if (!mounted) return;
       setState(() {
         dailyReports = list;
         if (list.isNotEmpty) {
-          selectedReport = list.first; // Default to showing the latest day
+          if (selectedReport != null) {
+            final selectedDate = selectedReport!['date'] as String?;
+            final match = list.where((r) => r['date'] == selectedDate);
+            selectedReport = match.isNotEmpty ? match.first : list.first;
+          } else {
+            selectedReport = list.first;
+          }
+        } else {
+          selectedReport = null;
         }
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted || silent) return;
       setState(() {
         errorMessage = e.toString().replaceFirst('Exception: ', '');
         isLoading = false;
       });
-    }
-  }
-
-  String _formatMs(int ms) {
-    final Duration duration = Duration(milliseconds: ms);
-    final int hours = duration.inHours;
-    final int minutes = duration.inMinutes.remainder(60);
-    
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    } else if (minutes > 0) {
-      return '${minutes}m';
-    } else {
-      final int secs = duration.inSeconds.remainder(60);
-      return '${secs}s';
     }
   }
 
@@ -549,6 +723,30 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
+          if (widget.deviceId != null && dailyReports.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2ECC71).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.circle, color: Color(0xFF2ECC71), size: 8),
+                      SizedBox(width: 6),
+                      Text(
+                        'Live',
+                        style: TextStyle(color: Color(0xFF2ECC71), fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (widget.deviceId != null)
             IconButton(
               icon: const Icon(Icons.refresh, color: Color(0xFFFF8906)),

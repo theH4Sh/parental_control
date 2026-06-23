@@ -89,6 +89,24 @@ class ApiService {
     debugPrint('✅ Usage stats synced successfully');
   }
 
+  /// Fetches today's usage summary for all children (parent-only, requires auth).
+  Future<Map<String, dynamic>> getChildrenUsageSummary({String? date}) async {
+    final uri = date != null
+        ? Uri.parse('$_baseUrl/auth/children/usage-summary?date=$date')
+        : Uri.parse('$_baseUrl/auth/children/usage-summary');
+
+    final response = await http.get(uri, headers: AuthService.instance.authHeaders);
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return body as Map<String, dynamic>;
+    } else {
+      throw Exception(
+        body['error'] ?? body['message'] ?? 'Failed to fetch children usage summary',
+      );
+    }
+  }
+
   /// Retrieves usage statistics for a specific device from the backend.
   Future<List<Map<String, dynamic>>> getUsageStats(String deviceId) async {
     final response = await http.get(
