@@ -5,24 +5,31 @@ const UsageStats = require('../models/UsageStats')
 const router = express.Router()
 
 // POST /api/register-device
-// Registers a new device and returns a unique deviceId
+// Registers a new device (or re-links an existing one) and returns deviceId.
+// When authenticated as a child, associates deviceId with that user account.
 router.post('/register-device', async (req, res, next) => {
   try {
-    const deviceId = new mongoose.Types.ObjectId().toString()
+    let deviceId = req.body?.deviceId || null
+    if (!deviceId) {
+      deviceId = new mongoose.Types.ObjectId().toString()
+    }
 
-    const authorization = req.headers.authorization;
+    const authorization = req.headers.authorization
     if (authorization) {
-      const jwt = require('jsonwebtoken');
-      const User = require('../models/userModel');
+      const jwt = require('jsonwebtoken')
+      const User = require('../models/userModel')
       try {
-        const token = authorization.split(' ')[1];
-        const decoded = jwt.verify(token, process.env.SECRET);
+        const token = authorization.split(' ')[1]
+        const decoded = jwt.verify(token, process.env.SECRET)
         if (decoded && decoded._id) {
-          await User.findByIdAndUpdate(decoded._id, { deviceId });
-          console.log(`Associated deviceId ${deviceId} with user ${decoded._id}`);
+          const user = await User.findById(decoded._id)
+          if (user && user.role === 'child') {
+            await User.findByIdAndUpdate(decoded._id, { deviceId })
+            console.log(`Associated deviceId ${deviceId} with child user ${decoded._id}`)
+          }
         }
       } catch (err) {
-        console.error("Failed to associate device with user:", err.message);
+        console.error('Failed to associate device with user:', err.message)
       }
     }
 

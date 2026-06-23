@@ -19,6 +19,12 @@ String _formatMs(int ms) {
   }
 }
 
+Map<String, dynamic>? _parseUsageMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
 
@@ -449,7 +455,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         final String childName = child['username'] ?? 'Unknown';
         final String childEmail = child['email'] ?? '';
         final String? childDeviceId = child['deviceId'];
-        final Map<String, dynamic>? usage = child['usage'] as Map<String, dynamic>?;
+        final Map<String, dynamic>? usage = _parseUsageMap(child['usage']);
         final int totalScreenTimeMs = usage?['totalScreenTimeMs'] as int? ?? 0;
         final List<dynamic> apps = usage?['apps'] ?? [];
         final String? topAppName = apps.isNotEmpty
@@ -464,6 +470,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                 MaterialPageRoute(
                   builder: (_) => ChildReportScreen(
                     childName: childName,
+                    childId: child['childId']?.toString(),
                     deviceId: childDeviceId,
                   ),
                 ),
@@ -637,11 +644,13 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
 
 class ChildReportScreen extends StatefulWidget {
   final String childName;
+  final String? childId;
   final String? deviceId;
 
   const ChildReportScreen({
     super.key,
     required this.childName,
+    this.childId,
     this.deviceId,
   });
 
@@ -655,10 +664,12 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
   List<Map<String, dynamic>> dailyReports = [];
   Map<String, dynamic>? selectedReport;
   Timer? _liveRefreshTimer;
+  String? _deviceId;
 
   @override
   void initState() {
     super.initState();
+    _deviceId = widget.deviceId;
     fetchStats();
     _liveRefreshTimer = Timer.periodic(
       const Duration(seconds: 30),
@@ -672,14 +683,25 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
     super.dispose();
   }
 
-  Future<void> fetchStats({bool silent = false}) async {
-    if (widget.deviceId == null) {
-      setState(() {
-        isLoading = false;
-      });
-      return;
+  Future<String?> _resolveDeviceId() async {
+    if (widget.childId == null) return _deviceId;
+
+    try {
+      final summary = await ApiService.instance.getChildrenUsageSummary();
+      final list = (summary['children'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      for (final child in list) {
+        if (child['childId']?.toString() == widget.childId) {
+          return child['deviceId'] as String?;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to resolve device link: $e');
     }
 
+    return _deviceId;
+  }
+
+  Future<void> fetchStats({bool silent = false}) async {
     if (!silent) {
       setState(() {
         isLoading = true;
@@ -688,7 +710,21 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
     }
 
     try {
-      final list = await ApiService.instance.getUsageStats(widget.deviceId!);
+      final resolvedDeviceId = await _resolveDeviceId();
+      if (!mounted) return;
+
+      if (resolvedDeviceId == null) {
+        setState(() {
+          _deviceId = null;
+          dailyReports = [];
+          selectedReport = null;
+          isLoading = false;
+        });
+        return;
+      }
+
+      _deviceId = resolvedDeviceId;
+      final list = await ApiService.instance.getUsageStats(resolvedDeviceId);
       if (!mounted) return;
       setState(() {
         dailyReports = list;
@@ -723,7 +759,7 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          if (widget.deviceId != null && dailyReports.isNotEmpty)
+          if (_deviceId != null && dailyReports.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Center(
@@ -747,7 +783,7 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
                 ),
               ),
             ),
-          if (widget.deviceId != null)
+          if (_deviceId != null)
             IconButton(
               icon: const Icon(Icons.refresh, color: Color(0xFFFF8906)),
               onPressed: fetchStats,
@@ -761,7 +797,7 @@ class _ChildReportScreenState extends State<ChildReportScreen> {
   }
 
   Widget _buildBody() {
-    if (widget.deviceId == null) {
+    if (_deviceId == null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),

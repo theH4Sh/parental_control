@@ -10,7 +10,7 @@ const getChildrenUsageSummary = async (req, res, next) => {
     const parent = req.user;
     const date = req.query.date || new Date().toISOString().substring(0, 10);
 
-    const children = await User.find({ parent_id: parent._id }).select('-password');
+    const children = await User.find({ parent_id: parent._id }).select('-password').lean();
 
     const deviceIds = children
       .filter((c) => c.deviceId)
@@ -18,17 +18,17 @@ const getChildrenUsageSummary = async (req, res, next) => {
 
     const statsByDevice = {};
     if (deviceIds.length > 0) {
-      const stats = await UsageStats.find({ deviceId: { $in: deviceIds }, date });
+      const stats = await UsageStats.find({ deviceId: { $in: deviceIds }, date }).lean();
       stats.forEach((s) => {
         statsByDevice[s.deviceId] = s;
       });
     }
 
     const result = children.map((child) => ({
-      childId: child._id,
+      childId: child._id.toString(),
       username: child.username,
       email: child.email,
-      deviceId: child.deviceId,
+      deviceId: child.deviceId || null,
       usage: child.deviceId ? statsByDevice[child.deviceId] || null : null,
     }));
 

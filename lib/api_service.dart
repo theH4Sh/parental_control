@@ -18,35 +18,37 @@ class ApiService {
   String? _deviceId;
   String? get deviceId => _deviceId;
 
-  /// Initialises the service: loads or registers a device ID.
+  /// Initialises the service: loads or registers a device ID and links it to the child account.
   Future<String?> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _deviceId = prefs.getString('device_id');
+    final cachedId = prefs.getString('device_id');
 
-    if (_deviceId == null) {
-      _deviceId = await _registerDevice();
-      if (_deviceId != null) {
-        await prefs.setString('device_id', _deviceId!);
-      }
+    final linkedId = await _registerDevice(existingDeviceId: cachedId);
+    if (linkedId != null) {
+      _deviceId = linkedId;
+      await prefs.setString('device_id', linkedId);
     }
 
     debugPrint('🔑 Device ID: $_deviceId');
     return _deviceId;
   }
 
-  /// Registers a new device with the backend, returns a unique deviceId.
-  Future<String?> _registerDevice() async {
+  /// Registers or re-links a device with the backend, returns the deviceId.
+  Future<String?> _registerDevice({String? existingDeviceId}) async {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/register-device'),
         headers: AuthService.instance.authHeaders,
+        body: jsonEncode(
+          existingDeviceId != null ? {'deviceId': existingDeviceId} : {},
+        ),
       );
 
       if (response.statusCode == 201) {
         final body = jsonDecode(response.body);
         return body['deviceId'] as String?;
       }
-      debugPrint('Register device failed: ${response.statusCode}');
+      debugPrint('Register device failed: ${response.statusCode} ${response.body}');
       return null;
     } catch (e) {
       debugPrint('Register device error: $e');
