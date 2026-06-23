@@ -4,6 +4,7 @@ const morgan = require('morgan')
 const cors = require('cors')
 require('dotenv').config()
 
+const userRoutes = require('./routes/userRoutes')
 const usageStatsRoutes = require('./routes/usageStats')
 
 const app = express()
@@ -20,6 +21,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // API Routes
 app.use('/api', usageStatsRoutes)
+app.use('/api/auth', userRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {
