@@ -52,4 +52,18 @@ const registerChild = async (req, res, next) => {
   }
 };
 
-module.exports = { registerChild };
+/**
+ * Get all registered children for the authenticated parent.
+ */
+const getChildren = async (req, res, next) => {
+  const parent = req.user; // set by requireAuth
+
+  try {
+    const children = await User.find({ parent_id: parent._id }).select('-password');
+    res.status(200).json({ success: true, children });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { registerChild, getChildren };

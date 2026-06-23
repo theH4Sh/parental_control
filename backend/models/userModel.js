@@ -36,7 +36,11 @@ const userSchema = new Schema({
     child_id: [{
         type: Schema.Types.ObjectId,
         ref: "User"
-    }]
+    }],
+    deviceId: {
+        type: String,
+        default: null
+    }
 }, { timestamps: true })
 
 // User SignUp

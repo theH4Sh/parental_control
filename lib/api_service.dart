@@ -5,14 +5,15 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'services/auth_service.dart';
+import 'utils/api_config.dart';
+
 class ApiService {
   // Singleton
   ApiService._privateConstructor();
   static final ApiService instance = ApiService._privateConstructor();
 
-  // For Android emulator: 10.0.2.2 maps to the host machine's localhost.
-  // For a physical device on the same LAN, replace with your machine's IP.
-  static const String _baseUrl = 'http://10.0.2.2:8000/api';
+  final String _baseUrl = ApiConfig.baseUrl;
 
   String? _deviceId;
   String? get deviceId => _deviceId;
@@ -38,7 +39,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$_baseUrl/register-device'),
-        headers: {'Content-Type': 'application/json'},
+        headers: AuthService.instance.authHeaders,
       );
 
       if (response.statusCode == 201) {
@@ -75,7 +76,7 @@ class ApiService {
 
     final response = await http.post(
       Uri.parse('$_baseUrl/usage-stats'),
-      headers: {'Content-Type': 'application/json'},
+      headers: AuthService.instance.authHeaders,
       body: jsonEncode(payload),
     );
 
@@ -86,5 +87,24 @@ class ApiService {
     }
 
     debugPrint('✅ Usage stats synced successfully');
+  }
+
+  /// Retrieves usage statistics for a specific device from the backend.
+  Future<List<Map<String, dynamic>>> getUsageStats(String deviceId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/usage-stats/$deviceId'),
+      headers: AuthService.instance.authHeaders,
+    );
+
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      final List<dynamic> list = body['data'] ?? [];
+      return list.cast<Map<String, dynamic>>();
+    } else {
+      throw Exception(
+        body['message'] ?? 'Failed to fetch usage stats for device $deviceId',
+      );
+    }
   }
 }

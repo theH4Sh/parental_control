@@ -9,6 +9,23 @@ const router = express.Router()
 router.post('/register-device', async (req, res, next) => {
   try {
     const deviceId = new mongoose.Types.ObjectId().toString()
+
+    const authorization = req.headers.authorization;
+    if (authorization) {
+      const jwt = require('jsonwebtoken');
+      const User = require('../models/userModel');
+      try {
+        const token = authorization.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.SECRET);
+        if (decoded && decoded._id) {
+          await User.findByIdAndUpdate(decoded._id, { deviceId });
+          console.log(`Associated deviceId ${deviceId} with user ${decoded._id}`);
+        }
+      } catch (err) {
+        console.error("Failed to associate device with user:", err.message);
+      }
+    }
+
     res.status(201).json({
       success: true,
       deviceId,
