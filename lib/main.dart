@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/parent_dashboard_screen.dart';
@@ -8,8 +9,8 @@ import 'screens/parent_dashboard_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load persisted auth session before the app renders
   await AuthService.instance.init();
+  await NotificationService.instance.init();
 
   runApp(const MyApp());
 }

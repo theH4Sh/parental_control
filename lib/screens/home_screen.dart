@@ -7,6 +7,9 @@ import 'package:usage_stats/usage_stats.dart';
 
 import '../api_service.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
+import '../services/websocket_service.dart';
+import '../services/control_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -51,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    WebSocketService.instance.disconnect();
     super.dispose();
   }
 
@@ -71,6 +75,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> initPermissionsAndStart() async {
     await initBackend();
+    await NotificationService.instance.requestPermission();
+    ChildSettingsService.instance.initWebSocketListener();
+    await ChildSettingsService.instance.loadSettings();
+    WebSocketService.instance.connect();
+
     if (!Platform.isAndroid) {
       setState(() {
         isLoading = false;
@@ -175,6 +184,8 @@ class _HomeScreenState extends State<HomeScreen> {
         usages = usageItems;
         isLoading = false;
       });
+      final totalMs = usageItems.fold<int>(0, (sum, u) => sum + u.totalMs);
+      await ChildSettingsService.instance.checkTimeLimit(totalMs);
       if (deviceId != null && usageItems.isNotEmpty) {
         syncToBackend();
       }
@@ -263,6 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (shouldLogout == true) {
+      WebSocketService.instance.disconnect();
       await AuthService.instance.logout();
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/login');

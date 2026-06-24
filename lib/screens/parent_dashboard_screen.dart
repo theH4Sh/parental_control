@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../api_service.dart';
+import 'child_control_screen.dart';
 
 String _formatMs(int ms) {
   final duration = Duration(milliseconds: ms);
@@ -544,6 +545,20 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                             ),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.settings_remote_rounded, color: Color(0xFFFF8906)),
+                        tooltip: 'Controls & notifications',
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ChildControlScreen(
+                                childId: child['childId']?.toString() ?? '',
+                                childName: childName,
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       const Icon(Icons.chevron_right_rounded, color: Color(0xFFA7A9BE), size: 28),
                     ],

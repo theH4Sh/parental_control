@@ -33,4 +33,13 @@ class ApiConfig {
     // Linux desktop, macOS, Windows desktop, iOS Simulator, etc.
     return 'http://localhost:8000/api';
   }
+
+  /// WebSocket URL for real-time parent→child notifications.
+  static String get wsUrl {
+    final httpBase = baseUrl.replaceFirst('/api', '');
+    final wsBase = httpBase
+        .replaceFirst('http://', 'ws://')
+        .replaceFirst('https://', 'wss://');
+    return '$wsBase/ws';
+  }
 }
