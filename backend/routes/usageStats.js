@@ -86,8 +86,8 @@ router.post('/usage-stats', async (req, res, next) => {
         sendToUser(childUser._id, {
           type: 'notification',
           payload: {
-            title: '⏰ Screen Time Limit Reached',
-            body: 'You\'ve used your allowed screen time for today. Please take a break!',
+            title: '⏰ Time\'s Up!',
+            body: 'You\'ve reached your daily screen time limit. Please take a break and put your device away!',
             notificationType: 'time_limit',
             sentAt: new Date().toISOString(),
           },

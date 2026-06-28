@@ -14,10 +14,25 @@ class ChildSettingsService {
 
   Map<String, dynamic>? _settings;
   String? _limitNotifiedDate;
+  VoidCallback? onSettingsChanged;
 
   Map<String, dynamic>? get settings => _settings;
   int get dailyTimeLimitMs => _settings?['dailyTimeLimitMs'] as int? ?? 0;
   bool get bedtimeEnabled => _settings?['bedtimeEnabled'] as bool? ?? false;
+  bool get hasTimeLimit => dailyTimeLimitMs > 0;
+
+  bool isOverLimit(int totalScreenTimeMs) =>
+      hasTimeLimit && totalScreenTimeMs >= dailyTimeLimitMs;
+
+  int remainingMs(int totalScreenTimeMs) {
+    if (!hasTimeLimit) return 0;
+    return (dailyTimeLimitMs - totalScreenTimeMs).clamp(0, dailyTimeLimitMs);
+  }
+
+  double limitProgress(int totalScreenTimeMs) {
+    if (!hasTimeLimit) return 0;
+    return (totalScreenTimeMs / dailyTimeLimitMs).clamp(0.0, 1.0);
+  }
 
   Future<void> loadSettings() async {
     try {
@@ -37,6 +52,7 @@ class ChildSettingsService {
   void _applySettings(Map<String, dynamic> settings) {
     _settings = settings;
     _updateBedtimeSchedule();
+    onSettingsChanged?.call();
   }
 
   void handleSettingsUpdate(Map<String, dynamic> settings) {
@@ -56,16 +72,15 @@ class ChildSettingsService {
 
   /// Returns true if a limit notification was shown.
   Future<bool> checkTimeLimit(int totalScreenTimeMs) async {
-    if (dailyTimeLimitMs <= 0) return false;
-    if (totalScreenTimeMs < dailyTimeLimitMs) return false;
+    if (!isOverLimit(totalScreenTimeMs)) return false;
 
     final today = DateTime.now().toIso8601String().substring(0, 10);
-    if (_limitNotifiedDate == today) return false;
+    if (_limitNotifiedDate == today) return true;
 
     _limitNotifiedDate = today;
     await NotificationService.instance.show(
-      title: '⏰ Screen Time Limit Reached',
-      body: 'You\'ve used your allowed screen time for today. Please take a break!',
+      title: '⏰ Time\'s Up!',
+      body: 'You\'ve reached your daily screen time limit. Please take a break and put your device away.',
       payload: 'time_limit',
     );
     return true;

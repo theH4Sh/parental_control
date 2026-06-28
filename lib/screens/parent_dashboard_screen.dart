@@ -5,6 +5,8 @@ import '../services/auth_service.dart';
 import '../api_service.dart';
 import 'child_control_screen.dart';
 import '../widgets/send_bedtime_dialog.dart';
+import '../widgets/set_time_limit_dialog.dart';
+import '../utils/time_format.dart';
 
 String _formatMs(int ms) {
   final duration = Duration(milliseconds: ms);
@@ -22,6 +24,12 @@ String _formatMs(int ms) {
 }
 
 Map<String, dynamic>? _parseUsageMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) return Map<String, dynamic>.from(value);
+  return null;
+}
+
+Map<String, dynamic>? _parseSettingsMap(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);
   return null;
@@ -458,6 +466,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         final String childEmail = child['email'] ?? '';
         final String? childDeviceId = child['deviceId'];
         final Map<String, dynamic>? usage = _parseUsageMap(child['usage']);
+        final Map<String, dynamic>? settings = _parseSettingsMap(child['settings']);
+        final int dailyLimitMs = settings?['dailyTimeLimitMs'] as int? ?? 0;
         final int totalScreenTimeMs = usage?['totalScreenTimeMs'] as int? ?? 0;
         final List<dynamic> apps = usage?['apps'] ?? [];
         final String? topAppName = apps.isNotEmpty
@@ -649,41 +659,96 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                     ),
                   ],
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        final childId = child['childId']?.toString();
-                        if (childId == null || childId.isEmpty) return;
-                        if (childDeviceId == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Link $childName\'s device first — log them in on their phone.',
-                              ),
-                              backgroundColor: const Color(0xFFFF8906),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            final childId = child['childId']?.toString();
+                            if (childId == null || childId.isEmpty) return;
+                            showSetTimeLimitDialog(
+                              context,
+                              childId: childId,
+                              childName: childName,
+                              currentLimitMs: dailyLimitMs,
+                            ).then((_) => loadChildren(silent: true));
+                          },
+                          icon: const Icon(Icons.timer_outlined, color: Color(0xFFFF8906), size: 18),
+                          label: Text(
+                            dailyLimitMs > 0
+                                ? 'Limit: ${formatDurationMs(dailyLimitMs)}'
+                                : 'Set Time Limit',
+                            style: const TextStyle(
+                              color: Color(0xFFFF8906),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
                             ),
-                          );
-                          return;
-                        }
-                        showSendBedtimeDialog(
-                          context,
-                          childId: childId,
-                          childName: childName,
-                        );
-                      },
-                      icon: const Icon(Icons.bedtime_rounded, color: Color(0xFFE53170), size: 20),
-                      label: const Text(
-                        'Send Bedtime Notification',
-                        style: TextStyle(color: Color(0xFFE53170), fontWeight: FontWeight.w600),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: const Color(0xFFFF8906).withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
                       ),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: const Color(0xFFE53170).withValues(alpha: 0.5)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            final childId = child['childId']?.toString();
+                            if (childId == null || childId.isEmpty) return;
+                            if (childDeviceId == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Link $childName\'s device first — log them in on their phone.',
+                                  ),
+                                  backgroundColor: const Color(0xFFFF8906),
+                                ),
+                              );
+                              return;
+                            }
+                            showSendBedtimeDialog(
+                              context,
+                              childId: childId,
+                              childName: childName,
+                            );
+                          },
+                          icon: const Icon(Icons.bedtime_rounded, color: Color(0xFFE53170), size: 18),
+                          label: const Text(
+                            'Send Bedtime',
+                            style: TextStyle(
+                              color: Color(0xFFE53170),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: const Color(0xFFE53170).withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (dailyLimitMs > 0 && childDeviceId != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      usage != null && totalScreenTimeMs >= dailyLimitMs
+                          ? '⚠️ Daily limit reached'
+                          : usage != null
+                              ? '${formatDurationMs(totalScreenTimeMs)} used of ${formatDurationMs(dailyLimitMs)} today'
+                              : 'Limit set — waiting for usage data',
+                      style: TextStyle(
+                        color: usage != null && totalScreenTimeMs >= dailyLimitMs
+                            ? const Color(0xFFE53170)
+                            : const Color(0xFFA7A9BE),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

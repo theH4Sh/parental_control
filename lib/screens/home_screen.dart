@@ -10,6 +10,7 @@ import '../services/auth_service.dart';
 import '../services/notification_service.dart';
 import '../services/websocket_service.dart';
 import '../services/control_service.dart';
+import '../utils/time_format.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? deviceId;
   String syncStatus = 'idle'; // 'idle', 'syncing', 'synced', 'error'
   DateTime? lastSynced;
+  String? _timeUpDialogShownDate;
 
   @override
   void initState() {
@@ -77,6 +79,9 @@ class _HomeScreenState extends State<HomeScreen> {
     await initBackend();
     await NotificationService.instance.requestPermission();
     ChildSettingsService.instance.initWebSocketListener();
+    ChildSettingsService.instance.onSettingsChanged = () {
+      if (mounted) setState(() {});
+    };
     await ChildSettingsService.instance.loadSettings();
     WebSocketService.instance.connect();
 
@@ -154,6 +159,8 @@ class _HomeScreenState extends State<HomeScreen> {
           usages = [];
           isLoading = false;
         });
+        await ChildSettingsService.instance.checkTimeLimit(0);
+        _maybeShowTimeUpDialog(0);
         return;
       }
 
@@ -180,12 +187,13 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }).toList()..sort((a, b) => b.totalMs.compareTo(a.totalMs));
 
+      final totalMs = usageItems.fold<int>(0, (sum, u) => sum + u.totalMs);
+      await ChildSettingsService.instance.checkTimeLimit(totalMs);
+      _maybeShowTimeUpDialog(totalMs);
       setState(() {
         usages = usageItems;
         isLoading = false;
       });
-      final totalMs = usageItems.fold<int>(0, (sum, u) => sum + u.totalMs);
-      await ChildSettingsService.instance.checkTimeLimit(totalMs);
       if (deviceId != null && usageItems.isNotEmpty) {
         syncToBackend();
       }
@@ -196,6 +204,49 @@ class _HomeScreenState extends State<HomeScreen> {
         isLoading = false;
       });
     }
+  }
+
+  void _maybeShowTimeUpDialog(int totalMs) {
+    final settings = ChildSettingsService.instance;
+    if (!settings.isOverLimit(totalMs)) return;
+
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (_timeUpDialogShownDate == today) return;
+    _timeUpDialogShownDate = today;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1F29),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.timer_off_rounded, color: Color(0xFFE53170), size: 28),
+              SizedBox(width: 12),
+              Text('Time\'s Up!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: const Text(
+            'You\'ve reached your daily screen time limit set by your parent. '
+            'Please take a break and put your device away.',
+            style: TextStyle(color: Color(0xFFA7A9BE), height: 1.4),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF8906),
+                foregroundColor: const Color(0xFF0F0E17),
+              ),
+              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   Future<void> syncToBackend() async {
@@ -342,11 +393,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               )
             : usages.isEmpty
-            ? _buildEmptyView()
+            ? Column(
+                children: [
+                  if (ChildSettingsService.instance.hasTimeLimit)
+                    _buildTimeLimitCard(0),
+                  Expanded(child: _buildEmptyView()),
+                ],
+              )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (ChildSettingsService.instance.isOverLimit(totalMs))
+                    _buildTimeUpBanner(),
                   _buildDashboardHeader(totalMs, totalApps, topApp),
+                  if (ChildSettingsService.instance.hasTimeLimit)
+                    _buildTimeLimitCard(totalMs),
                   _buildSyncStatusCard(),
                   const Padding(
                     padding: EdgeInsets.symmetric(
@@ -483,6 +544,112 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTimeUpBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE53170).withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE53170).withValues(alpha: 0.5)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.timer_off_rounded, color: Color(0xFFE53170), size: 28),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Time\'s Up!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Daily screen time limit reached. Please take a break.',
+                  style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeLimitCard(int totalMs) {
+    final settings = ChildSettingsService.instance;
+    final progress = settings.limitProgress(totalMs);
+    final remaining = settings.remainingMs(totalMs);
+    final overLimit = settings.isOverLimit(totalMs);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1F29),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: overLimit
+              ? const Color(0xFFE53170).withValues(alpha: 0.5)
+              : const Color(0xFFFF8906).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'DAILY LIMIT',
+                style: TextStyle(
+                  color: Color(0xFFFF8906),
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              Text(
+                overLimit
+                    ? 'Limit reached'
+                    : '${formatDurationMs(remaining)} left',
+                style: TextStyle(
+                  color: overLimit ? const Color(0xFFE53170) : const Color(0xFFA7A9BE),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: const Color(0xFF0F0E17),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                overLimit ? const Color(0xFFE53170) : const Color(0xFFFF8906),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${formatDurationMs(totalMs)} used of ${formatDurationMs(settings.dailyTimeLimitMs)}',
+            style: const TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
+          ),
+        ],
       ),
     );
   }

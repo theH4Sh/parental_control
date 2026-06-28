@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/control_service.dart';
+import '../utils/time_format.dart';
 import '../widgets/send_bedtime_dialog.dart';
+import '../widgets/set_time_limit_dialog.dart' show kTimeLimitPresets;
 
 class ChildControlScreen extends StatefulWidget {
   final String childId;
@@ -21,7 +23,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
   bool isSaving = false;
   String? errorMessage;
 
-  double limitHours = 0;
+  int limitMs = 0;
   bool bedtimeEnabled = false;
   TimeOfDay bedtime = const TimeOfDay(hour: 21, minute: 0);
 
@@ -48,9 +50,9 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
     });
     try {
       final settings = await ParentControlService.instance.getChildSettings(widget.childId);
-      final limitMs = settings['dailyTimeLimitMs'] as int? ?? 0;
+      final loadedLimitMs = settings['dailyTimeLimitMs'] as int? ?? 0;
       setState(() {
-        limitHours = limitMs / (1000 * 60 * 60);
+        limitMs = loadedLimitMs;
         bedtimeEnabled = settings['bedtimeEnabled'] as bool? ?? false;
         bedtime = TimeOfDay(
           hour: settings['bedtimeHour'] as int? ?? 21,
@@ -71,7 +73,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
     try {
       await ParentControlService.instance.updateChildSettings(
         widget.childId,
-        dailyTimeLimitMs: (limitHours * 60 * 60 * 1000).round(),
+        dailyTimeLimitMs: limitMs,
         bedtimeHour: bedtime.hour,
         bedtimeMinute: bedtime.minute,
         bedtimeEnabled: bedtimeEnabled,
@@ -163,26 +165,47 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              limitHours == 0
+                              limitMs == 0
                                   ? 'No limit set'
-                                  : '${limitHours.toStringAsFixed(1)} hours / day',
+                                  : '${formatDurationMs(limitMs)} / day',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Slider(
-                              value: limitHours,
-                              min: 0,
-                              max: 8,
-                              divisions: 16,
-                              label: limitHours == 0 ? 'Off' : '${limitHours.toStringAsFixed(1)}h',
-                              activeColor: const Color(0xFFFF8906),
-                              onChanged: (v) => setState(() => limitHours = v),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: kTimeLimitPresets.map((preset) {
+                                final (label, ms) = preset;
+                                final selected = limitMs == ms;
+                                return ActionChip(
+                                  label: Text(label),
+                                  backgroundColor:
+                                      selected ? const Color(0xFFFF8906) : const Color(0xFF0F0E17),
+                                  labelStyle: TextStyle(
+                                    color: selected ? const Color(0xFF0F0E17) : Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  side: BorderSide(
+                                    color: selected
+                                        ? const Color(0xFFFF8906)
+                                        : const Color(0xFFA7A9BE).withValues(alpha: 0.3),
+                                  ),
+                                  onPressed: () => setState(() => limitMs = ms),
+                                );
+                              }).toList(),
                             ),
+                            const SizedBox(height: 8),
                             const Text(
-                              'Child gets a notification when they exceed this limit.',
+                              'Use 1m or 5m to test the "time is up" alert quickly.',
+                              style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 11, fontStyle: FontStyle.italic),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Child gets a "Time\'s Up!" notification and in-app alert when they exceed this limit.',
                               style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
                             ),
                           ],
