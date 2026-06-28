@@ -4,6 +4,7 @@ const { registerChild, getChildren } = require('../controllers/childController')
 const { getChildrenUsageSummary } = require('../controllers/usageStatsController');
 const { getChildSettings, updateChildSettings, getMySettings } = require('../controllers/childSettingsController');
 const { sendChildNotification } = require('../controllers/notificationController');
+const { getProfile, updateProfile, changePassword } = require('../controllers/profileController');
 const requireAuth = require('../middlewares/requireAuth');
 const isParent = require('../middlewares/isParent');
 const isChild = require('../middlewares/isChild');
@@ -20,6 +21,9 @@ router.post('/forgot-password', forgotPassword);
 router.post('/reset-password/:token', resetPassword);
 
 // Protected routes — specific paths before /:username
+router.get('/me', requireAuth, isVerified, getProfile);
+router.put('/me', requireAuth, isVerified, updateProfile);
+router.put('/me/password', requireAuth, isVerified, changePassword);
 router.get('/children/usage-summary', requireAuth, isVerified, isParent, getChildrenUsageSummary);
 router.get('/children/:childId/settings', requireAuth, isVerified, isParent, canAccessChild, getChildSettings);
 router.put('/children/:childId/settings', requireAuth, isVerified, isParent, canAccessChild, updateChildSettings);

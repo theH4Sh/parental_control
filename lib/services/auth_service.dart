@@ -170,6 +170,68 @@ class AuthService {
     }
   }
 
+  /// Fetches the authenticated user's profile.
+  Future<Map<String, dynamic>> getProfile() async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/me'),
+      headers: authHeaders,
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body['user'] as Map<String, dynamic>;
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to load profile');
+  }
+
+  /// Updates username and/or email. Requires current password.
+  Future<Map<String, dynamic>> updateProfile({
+    String? username,
+    String? email,
+    required String currentPassword,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/me'),
+      headers: authHeaders,
+      body: jsonEncode({
+        if (username != null) 'username': username,
+        if (email != null) 'email': email,
+        'currentPassword': currentPassword,
+      }),
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      if (body['token'] != null) {
+        await _updateSession(
+          token: body['token'] as String,
+          username: body['username'] as String? ?? _username!,
+          role: body['role'] as String? ?? _role!,
+        );
+      }
+      return body as Map<String, dynamic>;
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to update profile');
+  }
+
+  /// Changes the account password.
+  Future<String> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/me/password'),
+      headers: authHeaders,
+      body: jsonEncode({
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body['message'] as String? ?? 'Password changed successfully';
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to change password');
+  }
+
   /// Fetches the list of children for the authenticated parent.
   Future<List<Map<String, dynamic>>> getChildren() async {
     final response = await http.get(
@@ -205,13 +267,21 @@ class AuthService {
   // ─── Internal helpers ─────────────────────────────────────
 
   Future<void> _persistSession(UserModel user) async {
-    _token = user.token;
-    _username = user.username;
-    _role = user.role;
+    await _updateSession(token: user.token, username: user.username, role: user.role);
+  }
+
+  Future<void> _updateSession({
+    required String token,
+    required String username,
+    required String role,
+  }) async {
+    _token = token;
+    _username = username;
+    _role = role;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyToken, user.token);
-    await prefs.setString(_keyUsername, user.username);
-    await prefs.setString(_keyRole, user.role);
+    await prefs.setString(_keyToken, token);
+    await prefs.setString(_keyUsername, username);
+    await prefs.setString(_keyRole, role);
   }
 }

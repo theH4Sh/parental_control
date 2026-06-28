@@ -7,6 +7,7 @@ import 'child_control_screen.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart';
 import '../utils/time_format.dart';
+import 'account_screen.dart';
 
 String _formatMs(int ms) {
   final duration = Duration(milliseconds: ms);
@@ -358,6 +359,15 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
             icon: const Icon(Icons.refresh, color: Color(0xFFFF8906)),
             onPressed: loadChildren,
             tooltip: 'Refresh child list',
+          ),
+          IconButton(
+            icon: const Icon(Icons.manage_accounts_rounded, color: Color(0xFFA7A9BE)),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
+              );
+            },
+            tooltip: 'Account settings',
           ),
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Color(0xFFA7A9BE)),

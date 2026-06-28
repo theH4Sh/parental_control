@@ -11,6 +11,7 @@ import '../services/notification_service.dart';
 import '../services/websocket_service.dart';
 import '../services/control_service.dart';
 import '../utils/time_format.dart';
+import 'account_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -375,7 +376,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 loadUsageStats();
               },
             ),
-          // Logout button
+          // Account settings
+          IconButton(
+            icon: const Icon(Icons.manage_accounts_rounded, color: Color(0xFFA7A9BE)),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AccountScreen()),
+              );
+            },
+            tooltip: 'Account settings',
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Color(0xFFA7A9BE)),
             onPressed: _handleLogout,
