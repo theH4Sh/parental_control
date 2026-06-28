@@ -45,8 +45,10 @@ class MainActivity : FlutterActivity() {
 					val limitMs = call.argument<Number>("dailyLimitMs")?.toLong() ?: 0L
 					val totalMs = call.argument<Number>("totalUsedMs")?.toLong() ?: 0L
 					val lockEnabled = call.argument<Boolean>("lockEnabled") ?: true
-					DeviceLockService.updateState(limitMs, totalMs, lockEnabled)
-					if (limitMs > 0L) {
+					val unlockUntilMs = call.argument<Number>("unlockUntilMs")?.toLong() ?: 0L
+					val forceLock = call.argument<Boolean>("forceDeviceLock") ?: false
+					DeviceLockService.updateState(this, limitMs, totalMs, lockEnabled, unlockUntilMs, forceLock)
+					if (DeviceLockState.shouldMonitor()) {
 						DeviceLockService.start(this)
 					} else {
 						DeviceLockService.stop(this)
@@ -59,6 +61,21 @@ class MainActivity : FlutterActivity() {
 				}
 				"isDeviceLocked" -> {
 					result.success(DeviceLockService.shouldLockDevice())
+				}
+				"getProtectionStatus" -> {
+					result.success(ProtectionHelper.getProtectionStatus(this))
+				}
+				"openAccessibilitySettings" -> {
+					ProtectionHelper.openAccessibilitySettings(this)
+					result.success(true)
+				}
+				"openOverlaySettings" -> {
+					LockOverlayManager.openOverlaySettings(this)
+					result.success(true)
+				}
+				"requestDeviceAdmin" -> {
+					startActivity(DeviceAdminHelper.createEnableIntent(this))
+					result.success(true)
 				}
 				else -> result.notImplemented()
 			}

@@ -7,6 +7,7 @@ import 'child_control_screen.dart';
 import 'child_account_screen.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart';
+import '../widgets/device_access_dialog.dart';
 import '../utils/time_format.dart';
 import 'account_screen.dart';
 
@@ -480,6 +481,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         final Map<String, dynamic>? settings = _parseSettingsMap(child['settings']);
         final int dailyLimitMs = settings?['dailyTimeLimitMs'] as int? ?? 0;
         final int totalScreenTimeMs = usage?['totalScreenTimeMs'] as int? ?? 0;
+        final bool forceDeviceLock = settings?['forceDeviceLock'] as bool? ?? false;
+        final String? unlockUntil = settings?['unlockUntil'] as String?;
+        final bool isUnlockedByParent = unlockUntil != null &&
+            DateTime.now().isBefore(DateTime.parse(unlockUntil));
+        final bool isDeviceLocked = !isUnlockedByParent &&
+            (forceDeviceLock || (dailyLimitMs > 0 && totalScreenTimeMs >= dailyLimitMs));
         final List<dynamic> apps = usage?['apps'] ?? [];
         final String? topAppName = apps.isNotEmpty
             ? (apps.first['displayName'] as String?)
@@ -764,20 +771,62 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                   if (dailyLimitMs > 0 && childDeviceId != null) ...[
                     const SizedBox(height: 8),
                     Text(
-                      usage != null && totalScreenTimeMs >= dailyLimitMs
-                          ? '⚠️ Daily limit reached'
-                          : usage != null
-                              ? '${formatDurationMs(totalScreenTimeMs)} used of ${formatDurationMs(dailyLimitMs)} today'
-                              : 'Limit set — waiting for usage data',
+                      isDeviceLocked
+                          ? '🔒 Device locked'
+                          : isUnlockedByParent
+                              ? '🔓 Temporarily unlocked by you'
+                              : usage != null
+                                  ? '${formatDurationMs(totalScreenTimeMs)} used of ${formatDurationMs(dailyLimitMs)} today'
+                                  : 'Limit set — waiting for usage data',
                       style: TextStyle(
-                        color: usage != null && totalScreenTimeMs >= dailyLimitMs
+                        color: isDeviceLocked
                             ? const Color(0xFFE53170)
-                            : const Color(0xFFA7A9BE),
+                            : isUnlockedByParent
+                                ? const Color(0xFF2ECC71)
+                                : const Color(0xFFA7A9BE),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final childId = child['childId']?.toString();
+                        if (childId == null || childId.isEmpty) return;
+                        showDeviceAccessDialog(
+                          context,
+                          childId: childId,
+                          childName: childName,
+                          currentlyLocked: isDeviceLocked,
+                          unlockUntil: unlockUntil,
+                        ).then((_) => loadChildren(silent: true));
+                      },
+                      icon: Icon(
+                        isDeviceLocked ? Icons.lock_open_rounded : Icons.lock_rounded,
+                        color: isDeviceLocked ? const Color(0xFF2ECC71) : const Color(0xFFE53170),
+                        size: 18,
+                      ),
+                      label: Text(
+                        isDeviceLocked ? 'Unlock device' : 'Lock / unlock device',
+                        style: TextStyle(
+                          color: isDeviceLocked ? const Color(0xFF2ECC71) : const Color(0xFFE53170),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                          color: (isDeviceLocked ? const Color(0xFF2ECC71) : const Color(0xFFE53170))
+                              .withValues(alpha: 0.5),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

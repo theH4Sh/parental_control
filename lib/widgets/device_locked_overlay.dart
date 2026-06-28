@@ -41,8 +41,7 @@ class DeviceLockedOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'You\'ve reached your daily screen time limit. '
-                  'This device is locked until tomorrow or your parent changes the limit.',
+                  'You\'ve reached your daily screen time limit. This device is locked and unusable until your parent allows access.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Color(0xFFA7A9BE),

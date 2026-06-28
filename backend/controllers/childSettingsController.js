@@ -8,6 +8,8 @@ const formatSettings = (doc) => ({
   bedtimeMinute: doc.bedtimeMinute,
   bedtimeEnabled: doc.bedtimeEnabled,
   lockDeviceOnLimit: doc.lockDeviceOnLimit !== false,
+  unlockUntil: doc.unlockUntil ? doc.unlockUntil.toISOString() : null,
+  forceDeviceLock: doc.forceDeviceLock === true,
 })
 
 async function getOrCreateSettings(childId) {
@@ -29,7 +31,7 @@ const getChildSettings = async (req, res, next) => {
 
 const updateChildSettings = async (req, res, next) => {
   try {
-    const { dailyTimeLimitMs, bedtimeHour, bedtimeMinute, bedtimeEnabled, lockDeviceOnLimit } = req.body
+    const { dailyTimeLimitMs, bedtimeHour, bedtimeMinute, bedtimeEnabled, lockDeviceOnLimit, unlockUntil, forceDeviceLock } = req.body
 
     const update = {}
     if (dailyTimeLimitMs !== undefined) update.dailyTimeLimitMs = Math.max(0, Number(dailyTimeLimitMs))
@@ -37,6 +39,21 @@ const updateChildSettings = async (req, res, next) => {
     if (bedtimeMinute !== undefined) update.bedtimeMinute = Math.min(59, Math.max(0, Number(bedtimeMinute)))
     if (bedtimeEnabled !== undefined) update.bedtimeEnabled = Boolean(bedtimeEnabled)
     if (lockDeviceOnLimit !== undefined) update.lockDeviceOnLimit = Boolean(lockDeviceOnLimit)
+    if (forceDeviceLock !== undefined) update.forceDeviceLock = Boolean(forceDeviceLock)
+    if (unlockUntil !== undefined) {
+      if (unlockUntil === null || unlockUntil === '') {
+        update.unlockUntil = null
+      } else {
+        const parsed = new Date(unlockUntil)
+        if (Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ error: 'Invalid unlockUntil date' })
+        }
+        update.unlockUntil = parsed
+      }
+    }
+    if (forceDeviceLock === true) {
+      update.unlockUntil = null
+    }
 
     const settings = await ChildSettings.findOneAndUpdate(
       { childId: req.child._id },

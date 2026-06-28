@@ -13,6 +13,7 @@ import '../services/control_service.dart';
 import '../utils/time_format.dart';
 import '../services/device_lock_service.dart';
 import '../widgets/device_locked_overlay.dart';
+import '../widgets/child_protection_setup_card.dart';
 import 'account_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? deviceId;
   String syncStatus = 'idle'; // 'idle', 'syncing', 'synced', 'error'
   DateTime? lastSynced;
+  bool protectionReady = false;
 
   @override
   void initState() {
@@ -98,6 +100,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     await checkPermission();
+    await _checkProtectionStatus();
     if (hasPermission) {
       await loadUsageStats();
     } else {
@@ -110,6 +113,12 @@ class _HomeScreenState extends State<HomeScreen> {
       (_) async {
       if (hasPermission) await loadUsageStats();
     });
+  }
+
+  Future<void> _checkProtectionStatus() async {
+    final status = await DeviceLockService.instance.getProtectionStatus();
+    if (!mounted) return;
+    setState(() => protectionReady = status.isFullyProtected);
   }
 
   Future<void> checkPermission() async {
@@ -372,6 +381,7 @@ class _HomeScreenState extends State<HomeScreen> {
             : usages.isEmpty
             ? Column(
                 children: [
+                  ChildProtectionSetupCard(onStatusChanged: _checkProtectionStatus),
                   if (ChildSettingsService.instance.hasTimeLimit)
                     _buildTimeLimitCard(0),
                   Expanded(child: _buildEmptyView()),
@@ -380,7 +390,10 @@ class _HomeScreenState extends State<HomeScreen> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (ChildSettingsService.instance.isOverLimit(totalMs))
+                  ChildProtectionSetupCard(
+                    onStatusChanged: _checkProtectionStatus,
+                  ),
+                  if (ChildSettingsService.instance.isDeviceLocked(totalMs))
                     _buildTimeUpBanner(),
                   _buildDashboardHeader(totalMs, totalApps, topApp),
                   if (ChildSettingsService.instance.hasTimeLimit)
@@ -556,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Daily screen time limit reached. Please take a break.',
+                  'Daily screen time limit reached. Device locked — ask your parent to unlock.',
                   style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
                 ),
               ],

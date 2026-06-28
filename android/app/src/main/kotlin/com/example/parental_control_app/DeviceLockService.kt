@@ -20,7 +20,8 @@ class DeviceLockService : Service() {
 	private val pollRunnable = object : Runnable {
 		override fun run() {
 			evaluateLockState()
-			handler.postDelayed(this, POLL_INTERVAL_MS)
+			val interval = if (DeviceLockState.shouldLockDevice()) LOCKED_POLL_MS else POLL_INTERVAL_MS
+			handler.postDelayed(this, interval)
 		}
 	}
 
@@ -30,6 +31,7 @@ class DeviceLockService : Service() {
 		super.onCreate()
 		isRunning = true
 		instance = this
+		DeviceLockState.restore(applicationContext)
 		createNotificationChannel()
 		startForeground(NOTIFICATION_ID, buildNotification())
 		handler.post(pollRunnable)
@@ -42,7 +44,6 @@ class DeviceLockService : Service() {
 
 	override fun onDestroy() {
 		handler.removeCallbacks(pollRunnable)
-		LockActivity.finishIfShowing()
 		isRunning = false
 		if (instance == this) {
 			instance = null
@@ -55,14 +56,16 @@ class DeviceLockService : Service() {
 	}
 
 	private fun evaluateLockState() {
-		if (!shouldLockDevice()) {
-			LockActivity.finishIfShowing()
+		if (!DeviceLockState.shouldLockDevice()) {
+			DeviceLockEnforcer.release(applicationContext)
 			return
 		}
 
+		DeviceLockEnforcer.enforce(applicationContext)
+
 		val foreground = getForegroundPackageName()
 		if (foreground != null && foreground != packageName) {
-			launchLockActivity()
+			DeviceLockEnforcer.enforce(applicationContext)
 		}
 	}
 
@@ -76,20 +79,13 @@ class DeviceLockService : Service() {
 		while (events.hasNextEvent()) {
 			events.getNextEvent(event)
 			if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND ||
-				event.eventType == UsageEvents.Event.ACTIVITY_RESUMED
+				(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+					event.eventType == UsageEvents.Event.ACTIVITY_RESUMED)
 			) {
 				lastPackage = event.packageName
 			}
 		}
 		return lastPackage
-	}
-
-	private fun launchLockActivity() {
-		if (LockActivity.isShowing) return
-		val intent = Intent(this, LockActivity::class.java).apply {
-			addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-		}
-		startActivity(intent)
 	}
 
 	private fun createNotificationChannel() {
@@ -99,7 +95,7 @@ class DeviceLockService : Service() {
 			"Screen time protection",
 			NotificationManager.IMPORTANCE_LOW,
 		).apply {
-			description = "Monitors screen time and locks the device when the daily limit is reached"
+			description = "Keeps parental lock active in the background"
 		}
 		val manager = getSystemService(NotificationManager::class.java)
 		manager.createNotificationChannel(channel)
@@ -113,9 +109,14 @@ class DeviceLockService : Service() {
 			launchIntent,
 			PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
 		)
+		val text = if (DeviceLockState.shouldLockDevice()) {
+			"Device is locked — waiting for parent approval"
+		} else {
+			"Monitoring screen time limits"
+		}
 		return NotificationCompat.Builder(this, CHANNEL_ID)
-			.setContentTitle("Screen time protection active")
-			.setContentText("Device will lock when the daily limit is reached")
+			.setContentTitle("Parental control active")
+			.setContentText(text)
 			.setSmallIcon(android.R.drawable.ic_lock_idle_lock)
 			.setContentIntent(pendingIntent)
 			.setOngoing(true)
@@ -127,18 +128,7 @@ class DeviceLockService : Service() {
 		private const val CHANNEL_ID = "device_lock_monitor"
 		private const val NOTIFICATION_ID = 1001
 		private const val POLL_INTERVAL_MS = 3000L
-
-		@Volatile
-		var dailyLimitMs: Long = 0L
-			private set
-
-		@Volatile
-		var totalUsedMs: Long = 0L
-			private set
-
-		@Volatile
-		var lockEnabled: Boolean = true
-			private set
+		private const val LOCKED_POLL_MS = 1000L
 
 		@Volatile
 		var isRunning: Boolean = false
@@ -147,14 +137,24 @@ class DeviceLockService : Service() {
 		@Volatile
 		private var instance: DeviceLockService? = null
 
-		fun shouldLockDevice(): Boolean =
-			lockEnabled && dailyLimitMs > 0L && totalUsedMs >= dailyLimitMs
+		fun shouldLockDevice(): Boolean = DeviceLockState.shouldLockDevice()
 
-		fun updateState(limitMs: Long, usedMs: Long, enabled: Boolean) {
-			dailyLimitMs = limitMs.coerceAtLeast(0L)
-			totalUsedMs = usedMs.coerceAtLeast(0L)
-			lockEnabled = enabled
+		fun updateState(
+			context: Context,
+			limitMs: Long,
+			usedMs: Long,
+			enabled: Boolean,
+			unlockUntilMs: Long,
+			forceLock: Boolean,
+		) {
+			DeviceLockState.update(limitMs, usedMs, enabled, unlockUntilMs, forceLock)
+			DeviceLockState.persist(context.applicationContext)
 			instance?.evaluateNow()
+			if (DeviceLockState.shouldLockDevice()) {
+				DeviceLockEnforcer.enforce(context.applicationContext)
+			} else {
+				DeviceLockEnforcer.release(context.applicationContext)
+			}
 		}
 
 		fun start(context: Context) {
@@ -167,8 +167,7 @@ class DeviceLockService : Service() {
 		}
 
 		fun stop(context: Context) {
-			updateState(0L, 0L, false)
-			LockActivity.finishIfShowing()
+			updateState(context, 0L, 0L, false, 0L, false)
 			context.stopService(Intent(context, DeviceLockService::class.java))
 		}
 	}

@@ -32,6 +32,14 @@ const childSettingsSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    unlockUntil: {
+      type: Date,
+      default: null,
+    },
+    forceDeviceLock: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 )

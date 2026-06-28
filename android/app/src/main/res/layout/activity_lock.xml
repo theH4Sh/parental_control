@@ -28,7 +28,7 @@
         android:layout_marginTop="16dp"
         android:gravity="center"
         android:lineSpacingExtra="4dp"
-        android:text="You've reached your daily screen time limit. This device is locked until tomorrow or your parent changes the limit."
+        android:text="You've reached your daily screen time limit. This device is locked and unusable until your parent allows access."
         android:textColor="#FFA7A9BE"
         android:textSize="16sp" />
 

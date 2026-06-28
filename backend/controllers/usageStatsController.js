@@ -51,6 +51,8 @@ const getChildrenUsageSummary = async (req, res, next) => {
           bedtimeMinute: 0,
           bedtimeEnabled: false,
           lockDeviceOnLimit: true,
+          unlockUntil: null,
+          forceDeviceLock: false,
         },
       };
     });

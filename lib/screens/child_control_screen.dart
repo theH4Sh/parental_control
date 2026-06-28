@@ -3,6 +3,7 @@ import '../services/control_service.dart';
 import '../utils/time_format.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart' show kTimeLimitPresets;
+import '../widgets/device_access_dialog.dart';
 import 'child_account_screen.dart';
 
 class ChildControlScreen extends StatefulWidget {
@@ -27,6 +28,8 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
   int limitMs = 0;
   bool bedtimeEnabled = false;
   bool lockDeviceOnLimit = true;
+  bool forceDeviceLock = false;
+  String? unlockUntil;
   TimeOfDay bedtime = const TimeOfDay(hour: 21, minute: 0);
 
   final _customTitleController = TextEditingController();
@@ -57,6 +60,8 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
         limitMs = loadedLimitMs;
         bedtimeEnabled = settings['bedtimeEnabled'] as bool? ?? false;
         lockDeviceOnLimit = settings['lockDeviceOnLimit'] as bool? ?? true;
+        forceDeviceLock = settings['forceDeviceLock'] as bool? ?? false;
+        unlockUntil = settings['unlockUntil'] as String?;
         bedtime = TimeOfDay(
           hour: settings['bedtimeHour'] as int? ?? 21,
           minute: settings['bedtimeMinute'] as int? ?? 0,
@@ -181,6 +186,56 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                             ),
                           );
                         },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _sectionTitle('Device Access'),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              forceDeviceLock
+                                  ? 'Device is locked by you'
+                                  : unlockUntil != null &&
+                                          DateTime.now().isBefore(DateTime.parse(unlockUntil!))
+                                      ? 'Device temporarily unlocked'
+                                      : 'Device follows screen time rules',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Lock the device immediately or grant temporary access. '
+                              'Deep lock requires the child to enable all protection permissions on their phone.',
+                              style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12, height: 1.4),
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => showDeviceAccessDialog(
+                                  context,
+                                  childId: widget.childId,
+                                  childName: widget.childName,
+                                  currentlyLocked: forceDeviceLock,
+                                  unlockUntil: unlockUntil,
+                                ).then((_) => _loadSettings()),
+                                icon: const Icon(Icons.lock_open_rounded),
+                                label: const Text('Lock / Unlock Device'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2ECC71),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),

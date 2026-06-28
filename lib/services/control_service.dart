@@ -21,10 +21,42 @@ class ChildSettingsService {
   int get dailyTimeLimitMs => _settings?['dailyTimeLimitMs'] as int? ?? 0;
   bool get bedtimeEnabled => _settings?['bedtimeEnabled'] as bool? ?? false;
   bool get lockDeviceOnLimit => _settings?['lockDeviceOnLimit'] as bool? ?? true;
+  bool get forceDeviceLock => _settings?['forceDeviceLock'] as bool? ?? false;
   bool get hasTimeLimit => dailyTimeLimitMs > 0;
 
-  bool shouldLockDevice(int totalScreenTimeMs) =>
-      lockDeviceOnLimit && isOverLimit(totalScreenTimeMs);
+  bool get isUnlockedByParent {
+    final until = _settings?['unlockUntil'];
+    if (until == null) return false;
+    try {
+      return DateTime.now().isBefore(DateTime.parse(until as String));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  DateTime? get unlockUntil {
+    final until = _settings?['unlockUntil'];
+    if (until == null) return null;
+    try {
+      return DateTime.parse(until as String);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  int get unlockUntilMs {
+    final dt = unlockUntil;
+    if (dt == null) return 0;
+    return dt.millisecondsSinceEpoch;
+  }
+
+  bool shouldLockDevice(int totalScreenTimeMs) {
+    if (isUnlockedByParent) return false;
+    if (forceDeviceLock) return true;
+    return lockDeviceOnLimit && isOverLimit(totalScreenTimeMs);
+  }
+
+  bool isDeviceLocked(int totalScreenTimeMs) => shouldLockDevice(totalScreenTimeMs);
 
   bool isOverLimit(int totalScreenTimeMs) =>
       hasTimeLimit && totalScreenTimeMs >= dailyTimeLimitMs;
@@ -57,6 +89,7 @@ class ChildSettingsService {
   void _applySettings(Map<String, dynamic> settings) {
     _settings = settings;
     _updateBedtimeSchedule();
+    syncDeviceLock(0);
     onSettingsChanged?.call();
   }
 
@@ -93,7 +126,8 @@ class ChildSettingsService {
   }
 
   Future<void> syncDeviceLock(int totalScreenTimeMs) async {
-    if (!hasTimeLimit) {
+    final shouldMonitor = lockDeviceOnLimit && (hasTimeLimit || forceDeviceLock);
+    if (!shouldMonitor) {
       await DeviceLockService.instance.stopLockMonitor();
       return;
     }
@@ -101,6 +135,8 @@ class ChildSettingsService {
       dailyLimitMs: dailyTimeLimitMs,
       totalUsedMs: totalScreenTimeMs,
       lockEnabled: lockDeviceOnLimit,
+      unlockUntilMs: unlockUntilMs,
+      forceDeviceLock: forceDeviceLock,
     );
   }
 
@@ -135,6 +171,9 @@ class ParentControlService {
     int? bedtimeMinute,
     bool? bedtimeEnabled,
     bool? lockDeviceOnLimit,
+    String? unlockUntil,
+    bool? forceDeviceLock,
+    bool clearUnlock = false,
   }) async {
     final response = await http.put(
       Uri.parse('${ApiConfig.baseUrl}/auth/children/$childId/settings'),
@@ -145,6 +184,9 @@ class ParentControlService {
         if (bedtimeMinute != null) 'bedtimeMinute': bedtimeMinute,
         if (bedtimeEnabled != null) 'bedtimeEnabled': bedtimeEnabled,
         if (lockDeviceOnLimit != null) 'lockDeviceOnLimit': lockDeviceOnLimit,
+        if (unlockUntil != null) 'unlockUntil': unlockUntil,
+        if (clearUnlock) 'unlockUntil': null,
+        if (forceDeviceLock != null) 'forceDeviceLock': forceDeviceLock,
       }),
     );
     final body = jsonDecode(response.body);
@@ -174,5 +216,25 @@ class ParentControlService {
       return bodyJson as Map<String, dynamic>;
     }
     throw Exception(bodyJson['error'] ?? bodyJson['message'] ?? 'Failed to send notification');
+  }
+
+  Future<Map<String, dynamic>> unlockDevice(
+    String childId, {
+    required Duration duration,
+  }) async {
+    final until = DateTime.now().add(duration).toUtc().toIso8601String();
+    return updateChildSettings(
+      childId,
+      unlockUntil: until,
+      forceDeviceLock: false,
+    );
+  }
+
+  Future<Map<String, dynamic>> lockDeviceNow(String childId) async {
+    return updateChildSettings(
+      childId,
+      forceDeviceLock: true,
+      clearUnlock: true,
+    );
   }
 }
