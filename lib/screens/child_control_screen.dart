@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/control_service.dart';
+import '../widgets/send_bedtime_dialog.dart';
 
 class ChildControlScreen extends StatefulWidget {
   final String childId;
@@ -227,7 +228,11 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
-                                onPressed: () => _sendNotification(type: 'bedtime'),
+                                onPressed: () => showSendBedtimeDialog(
+                                  context,
+                                  childId: widget.childId,
+                                  childName: widget.childName,
+                                ),
                                 icon: const Icon(Icons.nightlight_round, color: Color(0xFFE53170)),
                                 label: const Text('Send Bedtime Notification Now'),
                                 style: OutlinedButton.styleFrom(

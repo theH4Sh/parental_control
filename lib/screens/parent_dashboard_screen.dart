@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../api_service.dart';
 import 'child_control_screen.dart';
+import '../widgets/send_bedtime_dialog.dart';
 
 String _formatMs(int ms) {
   final duration = Duration(milliseconds: ms);
@@ -647,6 +648,42 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                             ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final childId = child['childId']?.toString();
+                        if (childId == null || childId.isEmpty) return;
+                        if (childDeviceId == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Link $childName\'s device first — log them in on their phone.',
+                              ),
+                              backgroundColor: const Color(0xFFFF8906),
+                            ),
+                          );
+                          return;
+                        }
+                        showSendBedtimeDialog(
+                          context,
+                          childId: childId,
+                          childName: childName,
+                        );
+                      },
+                      icon: const Icon(Icons.bedtime_rounded, color: Color(0xFFE53170), size: 20),
+                      label: const Text(
+                        'Send Bedtime Notification',
+                        style: TextStyle(color: Color(0xFFE53170), fontWeight: FontWeight.w600),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: const Color(0xFFE53170).withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
