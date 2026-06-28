@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 import 'notification_service.dart';
 import '../utils/api_config.dart';
+import 'device_lock_service.dart';
 import 'websocket_service.dart';
 
 class ChildSettingsService {
@@ -19,7 +20,11 @@ class ChildSettingsService {
   Map<String, dynamic>? get settings => _settings;
   int get dailyTimeLimitMs => _settings?['dailyTimeLimitMs'] as int? ?? 0;
   bool get bedtimeEnabled => _settings?['bedtimeEnabled'] as bool? ?? false;
+  bool get lockDeviceOnLimit => _settings?['lockDeviceOnLimit'] as bool? ?? true;
   bool get hasTimeLimit => dailyTimeLimitMs > 0;
+
+  bool shouldLockDevice(int totalScreenTimeMs) =>
+      lockDeviceOnLimit && isOverLimit(totalScreenTimeMs);
 
   bool isOverLimit(int totalScreenTimeMs) =>
       hasTimeLimit && totalScreenTimeMs >= dailyTimeLimitMs;
@@ -72,6 +77,7 @@ class ChildSettingsService {
 
   /// Returns true if a limit notification was shown.
   Future<bool> checkTimeLimit(int totalScreenTimeMs) async {
+    await syncDeviceLock(totalScreenTimeMs);
     if (!isOverLimit(totalScreenTimeMs)) return false;
 
     final today = DateTime.now().toIso8601String().substring(0, 10);
@@ -80,14 +86,29 @@ class ChildSettingsService {
     _limitNotifiedDate = today;
     await NotificationService.instance.show(
       title: '⏰ Time\'s Up!',
-      body: 'You\'ve reached your daily screen time limit. Please take a break and put your device away.',
+      body: 'You\'ve reached your daily screen time limit. Your device is now locked.',
       payload: 'time_limit',
     );
     return true;
   }
 
+  Future<void> syncDeviceLock(int totalScreenTimeMs) async {
+    if (!hasTimeLimit) {
+      await DeviceLockService.instance.stopLockMonitor();
+      return;
+    }
+    await DeviceLockService.instance.syncLockState(
+      dailyLimitMs: dailyTimeLimitMs,
+      totalUsedMs: totalScreenTimeMs,
+      lockEnabled: lockDeviceOnLimit,
+    );
+  }
+
   void initWebSocketListener() {
     WebSocketService.instance.onSettingsUpdated = handleSettingsUpdate;
+    WebSocketService.instance.onTimeLimitReached = () {
+      onSettingsChanged?.call();
+    };
   }
 }
 
@@ -113,6 +134,7 @@ class ParentControlService {
     int? bedtimeHour,
     int? bedtimeMinute,
     bool? bedtimeEnabled,
+    bool? lockDeviceOnLimit,
   }) async {
     final response = await http.put(
       Uri.parse('${ApiConfig.baseUrl}/auth/children/$childId/settings'),
@@ -122,6 +144,7 @@ class ParentControlService {
         if (bedtimeHour != null) 'bedtimeHour': bedtimeHour,
         if (bedtimeMinute != null) 'bedtimeMinute': bedtimeMinute,
         if (bedtimeEnabled != null) 'bedtimeEnabled': bedtimeEnabled,
+        if (lockDeviceOnLimit != null) 'lockDeviceOnLimit': lockDeviceOnLimit,
       }),
     );
     final body = jsonDecode(response.body);

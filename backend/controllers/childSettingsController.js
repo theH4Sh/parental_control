@@ -7,6 +7,7 @@ const formatSettings = (doc) => ({
   bedtimeHour: doc.bedtimeHour,
   bedtimeMinute: doc.bedtimeMinute,
   bedtimeEnabled: doc.bedtimeEnabled,
+  lockDeviceOnLimit: doc.lockDeviceOnLimit !== false,
 })
 
 async function getOrCreateSettings(childId) {
@@ -28,13 +29,14 @@ const getChildSettings = async (req, res, next) => {
 
 const updateChildSettings = async (req, res, next) => {
   try {
-    const { dailyTimeLimitMs, bedtimeHour, bedtimeMinute, bedtimeEnabled } = req.body
+    const { dailyTimeLimitMs, bedtimeHour, bedtimeMinute, bedtimeEnabled, lockDeviceOnLimit } = req.body
 
     const update = {}
     if (dailyTimeLimitMs !== undefined) update.dailyTimeLimitMs = Math.max(0, Number(dailyTimeLimitMs))
     if (bedtimeHour !== undefined) update.bedtimeHour = Math.min(23, Math.max(0, Number(bedtimeHour)))
     if (bedtimeMinute !== undefined) update.bedtimeMinute = Math.min(59, Math.max(0, Number(bedtimeMinute)))
     if (bedtimeEnabled !== undefined) update.bedtimeEnabled = Boolean(bedtimeEnabled)
+    if (lockDeviceOnLimit !== undefined) update.lockDeviceOnLimit = Boolean(lockDeviceOnLimit)
 
     const settings = await ChildSettings.findOneAndUpdate(
       { childId: req.child._id },

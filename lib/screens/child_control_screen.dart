@@ -26,6 +26,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
 
   int limitMs = 0;
   bool bedtimeEnabled = false;
+  bool lockDeviceOnLimit = true;
   TimeOfDay bedtime = const TimeOfDay(hour: 21, minute: 0);
 
   final _customTitleController = TextEditingController();
@@ -55,6 +56,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
       setState(() {
         limitMs = loadedLimitMs;
         bedtimeEnabled = settings['bedtimeEnabled'] as bool? ?? false;
+        lockDeviceOnLimit = settings['lockDeviceOnLimit'] as bool? ?? true;
         bedtime = TimeOfDay(
           hour: settings['bedtimeHour'] as int? ?? 21,
           minute: settings['bedtimeMinute'] as int? ?? 0,
@@ -78,6 +80,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
         bedtimeHour: bedtime.hour,
         bedtimeMinute: bedtime.minute,
         bedtimeEnabled: bedtimeEnabled,
+        lockDeviceOnLimit: lockDeviceOnLimit,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -232,6 +235,23 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                               'Child gets a "Time\'s Up!" notification and in-app alert when they exceed this limit.',
                               style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
                             ),
+                            if (limitMs > 0) ...[
+                              const SizedBox(height: 12),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text(
+                                  'Lock device when limit reached',
+                                  style: TextStyle(color: Colors.white, fontSize: 14),
+                                ),
+                                subtitle: const Text(
+                                  'Blocks other apps and shows a lock screen on the child\'s phone',
+                                  style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 11),
+                                ),
+                                value: lockDeviceOnLimit,
+                                activeThumbColor: const Color(0xFFFF8906),
+                                onChanged: (v) => setState(() => lockDeviceOnLimit = v),
+                              ),
+                            ],
                           ],
                         ),
                       ),

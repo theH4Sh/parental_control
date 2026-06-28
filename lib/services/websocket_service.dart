@@ -18,6 +18,7 @@ class WebSocketService {
   StreamSubscription? _subscription;
   Timer? _reconnectTimer;
   SettingsCallback? onSettingsUpdated;
+  VoidCallback? onTimeLimitReached;
 
   bool get isConnected => _channel != null;
 
@@ -62,11 +63,15 @@ class WebSocketService {
         case 'notification':
           if (payload is Map) {
             final map = Map<String, dynamic>.from(payload);
+            final notificationType = map['notificationType'] as String?;
             NotificationService.instance.show(
               title: map['title'] as String? ?? 'Parental Control',
               body: map['body'] as String? ?? '',
-              payload: map['notificationType'] as String?,
+              payload: notificationType,
             );
+            if (notificationType == 'time_limit') {
+              onTimeLimitReached?.call();
+            }
           }
           break;
         case 'settings_updated':

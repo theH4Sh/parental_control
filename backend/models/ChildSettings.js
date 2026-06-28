@@ -28,6 +28,10 @@ const childSettingsSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    lockDeviceOnLimit: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 )

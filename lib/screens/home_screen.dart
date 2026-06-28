@@ -11,6 +11,8 @@ import '../services/notification_service.dart';
 import '../services/websocket_service.dart';
 import '../services/control_service.dart';
 import '../utils/time_format.dart';
+import '../services/device_lock_service.dart';
+import '../widgets/device_locked_overlay.dart';
 import 'account_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -46,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String? deviceId;
   String syncStatus = 'idle'; // 'idle', 'syncing', 'synced', 'error'
   DateTime? lastSynced;
-  String? _timeUpDialogShownDate;
 
   @override
   void initState() {
@@ -58,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _pollTimer?.cancel();
     WebSocketService.instance.disconnect();
+    DeviceLockService.instance.stopLockMonitor();
     super.dispose();
   }
 
@@ -81,7 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
     await NotificationService.instance.requestPermission();
     ChildSettingsService.instance.initWebSocketListener();
     ChildSettingsService.instance.onSettingsChanged = () {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        if (hasPermission) loadUsageStats();
+      }
     };
     await ChildSettingsService.instance.loadSettings();
     WebSocketService.instance.connect();
@@ -100,7 +105,9 @@ class _HomeScreenState extends State<HomeScreen> {
         isLoading = false;
       });
     }
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _pollTimer = Timer.periodic(
+      Duration(seconds: ChildSettingsService.instance.hasTimeLimit ? 10 : 30),
+      (_) async {
       if (hasPermission) await loadUsageStats();
     });
   }
@@ -161,7 +168,6 @@ class _HomeScreenState extends State<HomeScreen> {
           isLoading = false;
         });
         await ChildSettingsService.instance.checkTimeLimit(0);
-        _maybeShowTimeUpDialog(0);
         return;
       }
 
@@ -190,7 +196,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final totalMs = usageItems.fold<int>(0, (sum, u) => sum + u.totalMs);
       await ChildSettingsService.instance.checkTimeLimit(totalMs);
-      _maybeShowTimeUpDialog(totalMs);
       setState(() {
         usages = usageItems;
         isLoading = false;
@@ -205,49 +210,6 @@ class _HomeScreenState extends State<HomeScreen> {
         isLoading = false;
       });
     }
-  }
-
-  void _maybeShowTimeUpDialog(int totalMs) {
-    final settings = ChildSettingsService.instance;
-    if (!settings.isOverLimit(totalMs)) return;
-
-    final today = DateTime.now().toIso8601String().substring(0, 10);
-    if (_timeUpDialogShownDate == today) return;
-    _timeUpDialogShownDate = today;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1F29),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.timer_off_rounded, color: Color(0xFFE53170), size: 28),
-              SizedBox(width: 12),
-              Text('Time\'s Up!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: const Text(
-            'You\'ve reached your daily screen time limit set by your parent. '
-            'Please take a break and put your device away.',
-            style: TextStyle(color: Color(0xFFA7A9BE), height: 1.4),
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF8906),
-                foregroundColor: const Color(0xFF0F0E17),
-              ),
-              child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        ),
-      );
-    });
   }
 
   Future<void> syncToBackend() async {
@@ -327,6 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (shouldLogout == true) {
       WebSocketService.instance.disconnect();
+      await DeviceLockService.instance.stopLockMonitor();
       await AuthService.instance.logout();
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed('/login');
@@ -339,8 +302,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final totalApps = usages.length;
     final topApp = usages.isNotEmpty ? usages.first.displayName : 'None';
     final maxMs = usages.isNotEmpty ? usages.first.totalMs : 1;
+    final settings = ChildSettingsService.instance;
+    final isLocked = settings.shouldLockDevice(totalMs);
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -447,6 +414,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
       ),
+    ),
+        if (isLocked) const Positioned.fill(child: DeviceLockedOverlay()),
+      ],
     );
   }
 

@@ -50,6 +50,7 @@ const getChildrenUsageSummary = async (req, res, next) => {
           bedtimeHour: 21,
           bedtimeMinute: 0,
           bedtimeEnabled: false,
+          lockDeviceOnLimit: true,
         },
       };
     });

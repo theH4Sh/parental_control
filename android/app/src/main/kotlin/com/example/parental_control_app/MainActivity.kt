@@ -16,11 +16,12 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-	private val CHANNEL = "com.example.parental_control_app/usage"
+	private val USAGE_CHANNEL = "com.example.parental_control_app/usage"
+	private val LOCK_CHANNEL = "com.example.parental_control_app/device_lock"
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
-		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, USAGE_CHANNEL).setMethodCallHandler { call, result ->
 			when (call.method) {
 				"hasUsageAccess" -> {
 					result.success(hasUsageAccess())
@@ -34,6 +35,30 @@ class MainActivity : FlutterActivity() {
 				"getAppDetails" -> {
 					val packageNames = call.arguments as? List<*>
 					result.success(getAppDetails(packageNames))
+				}
+				else -> result.notImplemented()
+			}
+		}
+		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCK_CHANNEL).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"syncLockState" -> {
+					val limitMs = call.argument<Number>("dailyLimitMs")?.toLong() ?: 0L
+					val totalMs = call.argument<Number>("totalUsedMs")?.toLong() ?: 0L
+					val lockEnabled = call.argument<Boolean>("lockEnabled") ?: true
+					DeviceLockService.updateState(limitMs, totalMs, lockEnabled)
+					if (limitMs > 0L) {
+						DeviceLockService.start(this)
+					} else {
+						DeviceLockService.stop(this)
+					}
+					result.success(true)
+				}
+				"stopLockMonitor" -> {
+					DeviceLockService.stop(this)
+					result.success(true)
+				}
+				"isDeviceLocked" -> {
+					result.success(DeviceLockService.shouldLockDevice())
 				}
 				else -> result.notImplemented()
 			}
