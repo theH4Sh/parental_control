@@ -251,6 +251,54 @@ class AuthService {
     }
   }
 
+  /// Fetches a child's profile (parent-only).
+  Future<Map<String, dynamic>> getChildProfile(String childId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/children/$childId/profile'),
+      headers: authHeaders,
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body['user'] as Map<String, dynamic>;
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to load child profile');
+  }
+
+  /// Updates a child's username and/or email (parent-only).
+  Future<Map<String, dynamic>> updateChildProfile(
+    String childId, {
+    String? username,
+    String? email,
+  }) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/children/$childId/profile'),
+      headers: authHeaders,
+      body: jsonEncode({
+        if (username != null) 'username': username,
+        if (email != null) 'email': email,
+      }),
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body as Map<String, dynamic>;
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to update child profile');
+  }
+
+  /// Resets a child's password (parent-only).
+  Future<String> resetChildPassword(String childId, String newPassword) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/children/$childId/password'),
+      headers: authHeaders,
+      body: jsonEncode({'newPassword': newPassword}),
+    );
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body['message'] as String? ?? 'Child password updated successfully';
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to reset child password');
+  }
+
   // ─── Logout ───────────────────────────────────────────────
 
   Future<void> logout() async {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../api_service.dart';
 import 'child_control_screen.dart';
+import 'child_account_screen.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart';
 import '../utils/time_format.dart';
@@ -566,6 +567,24 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                             ),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.manage_accounts_rounded, color: Color(0xFFE53170)),
+                        tooltip: 'Child account settings',
+                        onPressed: () {
+                          final childId = child['childId']?.toString() ?? '';
+                          if (childId.isEmpty) return;
+                          Navigator.of(context)
+                              .push(
+                                MaterialPageRoute(
+                                  builder: (_) => ChildAccountScreen(
+                                    childId: childId,
+                                    childName: childName,
+                                  ),
+                                ),
+                              )
+                              .then((_) => loadChildren(silent: true));
+                        },
                       ),
                       IconButton(
                         icon: const Icon(Icons.settings_remote_rounded, color: Color(0xFFFF8906)),

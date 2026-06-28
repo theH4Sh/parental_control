@@ -3,6 +3,7 @@ import '../services/control_service.dart';
 import '../utils/time_format.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart' show kTimeLimitPresets;
+import 'child_account_screen.dart';
 
 class ChildControlScreen extends StatefulWidget {
   final String childId;
@@ -157,6 +158,29 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    _sectionTitle('Child Account'),
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.manage_accounts_rounded, color: Color(0xFFE53170)),
+                        title: const Text('Username & password', style: TextStyle(color: Colors.white)),
+                        subtitle: const Text(
+                          'Update login details for this child',
+                          style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
+                        ),
+                        trailing: const Icon(Icons.chevron_right, color: Color(0xFFA7A9BE)),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ChildAccountScreen(
+                                childId: widget.childId,
+                                childName: widget.childName,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     _sectionTitle('Daily Screen Time Limit'),
                     Card(
                       child: Padding(

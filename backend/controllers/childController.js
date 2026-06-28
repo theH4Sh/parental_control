@@ -1,5 +1,18 @@
 const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const validator = require('validator');
+
+const sanitizeChild = (user) => ({
+  id: user._id,
+  username: user.username,
+  email: user.email,
+  role: user.role,
+  isVerified: user.isVerified,
+  deviceId: user.deviceId || null,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+});
 
 /**
  * Register a child account. Only a verified parent can call this endpoint.
@@ -66,4 +79,101 @@ const getChildren = async (req, res, next) => {
   }
 };
 
-module.exports = { registerChild, getChildren };
+/**
+ * GET /api/auth/children/:childId/profile — parent fetches a child's account details
+ */
+const getChildProfile = async (req, res, next) => {
+  try {
+    res.status(200).json({ success: true, user: sanitizeChild(req.child) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/auth/children/:childId/profile — parent updates child's username and/or email
+ * Body: { username?, email? }
+ */
+const updateChildProfile = async (req, res, next) => {
+  try {
+    const { username, email } = req.body;
+    const child = req.child;
+
+    if (!username && !email) {
+      return res.status(400).json({ error: 'Provide a new username or email to update' });
+    }
+
+    if (username !== undefined) {
+      const trimmed = username.trim();
+      if (trimmed.length < 3) {
+        return res.status(400).json({ error: 'Username must be at least 3 characters long' });
+      }
+      if (trimmed !== child.username) {
+        const taken = await User.findOne({ username: trimmed });
+        if (taken) {
+          return res.status(409).json({ error: 'Username already taken' });
+        }
+        child.username = trimmed;
+      }
+    }
+
+    if (email !== undefined) {
+      const trimmed = email.trim().toLowerCase();
+      if (!validator.isEmail(trimmed)) {
+        return res.status(400).json({ error: 'Invalid email address' });
+      }
+      if (trimmed !== child.email) {
+        const taken = await User.findOne({ email: trimmed });
+        if (taken) {
+          return res.status(409).json({ error: 'Email already in use' });
+        }
+        child.email = trimmed;
+      }
+    }
+
+    await child.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Child profile updated successfully',
+      user: sanitizeChild(child),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/auth/children/:childId/password — parent resets child's password
+ * Body: { newPassword }
+ */
+const resetChildPassword = async (req, res, next) => {
+  try {
+    const { newPassword } = req.body;
+    const child = req.child;
+
+    if (!newPassword) {
+      return res.status(400).json({ error: 'New password is required' });
+    }
+
+    if (!validator.isStrongPassword(newPassword)) {
+      return res.status(400).json({ error: 'Password is not strong enough' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    child.password = await bcrypt.hash(newPassword, salt);
+    await child.save();
+
+    res.status(200).json({ success: true, message: 'Child password updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  registerChild,
+  getChildren,
+  getChildProfile,
+  updateChildProfile,
+  resetChildPassword,
+};

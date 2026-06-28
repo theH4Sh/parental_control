@@ -1,6 +1,6 @@
 const express = require('express');
 const { loginUser, signUpUser, getUser, verifyEmail, forgotPassword, resetPassword } = require('../controllers/userController');
-const { registerChild, getChildren } = require('../controllers/childController');
+const { registerChild, getChildren, getChildProfile, updateChildProfile, resetChildPassword } = require('../controllers/childController');
 const { getChildrenUsageSummary } = require('../controllers/usageStatsController');
 const { getChildSettings, updateChildSettings, getMySettings } = require('../controllers/childSettingsController');
 const { sendChildNotification } = require('../controllers/notificationController');
@@ -27,6 +27,9 @@ router.put('/me/password', requireAuth, isVerified, changePassword);
 router.get('/children/usage-summary', requireAuth, isVerified, isParent, getChildrenUsageSummary);
 router.get('/children/:childId/settings', requireAuth, isVerified, isParent, canAccessChild, getChildSettings);
 router.put('/children/:childId/settings', requireAuth, isVerified, isParent, canAccessChild, updateChildSettings);
+router.get('/children/:childId/profile', requireAuth, isVerified, isParent, canAccessChild, getChildProfile);
+router.put('/children/:childId/profile', requireAuth, isVerified, isParent, canAccessChild, updateChildProfile);
+router.put('/children/:childId/password', requireAuth, isVerified, isParent, canAccessChild, resetChildPassword);
 router.post('/children/:childId/notify', requireAuth, isVerified, isParent, canAccessChild, sendChildNotification);
 router.get('/my-settings', requireAuth, isVerified, isChild, getMySettings);
 router.get('/children', requireAuth, isVerified, isParent, getChildren);
