@@ -61,6 +61,7 @@ class _SetTimeLimitDialogState extends State<_SetTimeLimitDialog> {
       await ParentControlService.instance.updateChildSettings(
         widget.childId,
         dailyTimeLimitMs: _limitMs,
+        restartLimitTimer: true,
       );
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
@@ -70,7 +71,7 @@ class _SetTimeLimitDialogState extends State<_SetTimeLimitDialog> {
           content: Text(
             _limitMs == 0
                 ? 'Screen time limit removed for ${widget.childName}'
-                : 'Daily limit set to ${formatDurationMs(_limitMs)} for ${widget.childName}',
+                : '${formatDurationMs(_limitMs)} timer started for ${widget.childName}',
           ),
           backgroundColor: const Color(0xFF2ECC71),
         ),
@@ -121,7 +122,7 @@ class _SetTimeLimitDialogState extends State<_SetTimeLimitDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'When your child hits this limit, their device shows a "time is up" notification and alert.',
+              'The timer starts immediately when you save. Your child has this much time from right now.',
               style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 20),
@@ -134,7 +135,7 @@ class _SetTimeLimitDialogState extends State<_SetTimeLimitDialog> {
               ),
             ),
             Text(
-              _limitMs == 0 ? 'Unlimited screen time' : 'Daily allowance',
+              _limitMs == 0 ? 'Unlimited screen time' : 'Countdown from when you save',
               style: const TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
             ),
             const SizedBox(height: 16),
@@ -148,7 +149,7 @@ class _SetTimeLimitDialogState extends State<_SetTimeLimitDialog> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Tip: use 1m or 5m to test the "time is up" alert quickly.',
+              'Tip: use 1m or 5m to test — the countdown starts the moment you tap Save.',
               style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 11, fontStyle: FontStyle.italic),
             ),
           ],

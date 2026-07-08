@@ -47,6 +47,7 @@ const getChildrenUsageSummary = async (req, res, next) => {
         settings: settingsByChild[childIdStr] || {
           childId: childIdStr,
           dailyTimeLimitMs: 0,
+          limitStartedAt: null,
           bedtimeHour: 21,
           bedtimeMinute: 0,
           bedtimeEnabled: false,

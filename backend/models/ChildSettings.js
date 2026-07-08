@@ -12,6 +12,10 @@ const childSettingsSchema = new mongoose.Schema(
       type: Number,
       default: 0, // 0 = no limit
     },
+    limitStartedAt: {
+      type: Date,
+      default: null,
+    },
     bedtimeHour: {
       type: Number,
       default: 21,

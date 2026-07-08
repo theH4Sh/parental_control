@@ -10,6 +10,7 @@ import '../widgets/set_time_limit_dialog.dart';
 import 'child_web_activity_screen.dart';
 import '../widgets/device_access_dialog.dart';
 import '../utils/time_format.dart';
+import '../utils/limit_timer.dart';
 import 'account_screen.dart';
 
 String _formatMs(int ms) {
@@ -486,8 +487,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         final String? unlockUntil = settings?['unlockUntil'] as String?;
         final bool isUnlockedByParent = unlockUntil != null &&
             DateTime.now().isBefore(DateTime.parse(unlockUntil));
+        final bool limitOver = LimitTimer.isOverLimit(settings);
+        final int limitRemainingMs = LimitTimer.remainingMs(settings);
         final bool isDeviceLocked = !isUnlockedByParent &&
-            (forceDeviceLock || (dailyLimitMs > 0 && totalScreenTimeMs >= dailyLimitMs));
+            (forceDeviceLock || limitOver);
         final List<dynamic> apps = usage?['apps'] ?? [];
         final String? topAppName = apps.isNotEmpty
             ? (apps.first['displayName'] as String?)
@@ -713,7 +716,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                           icon: const Icon(Icons.timer_outlined, color: Color(0xFFFF8906), size: 18),
                           label: Text(
                             dailyLimitMs > 0
-                                ? 'Limit: ${formatDurationMs(dailyLimitMs)}'
+                                ? 'Timer: ${formatDurationMs(dailyLimitMs)}'
                                 : 'Set Time Limit',
                             style: const TextStyle(
                               color: Color(0xFFFF8906),
@@ -776,9 +779,11 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                           ? '🔒 Device locked'
                           : isUnlockedByParent
                               ? '🔓 Temporarily unlocked by you'
-                              : usage != null
-                                  ? '${formatDurationMs(totalScreenTimeMs)} used of ${formatDurationMs(dailyLimitMs)} today'
-                                  : 'Limit set — waiting for usage data',
+                              : LimitTimer.isActive(settings)
+                                  ? '⏱ ${formatDurationMs(limitRemainingMs)} remaining'
+                                  : usage != null
+                                      ? '${formatDurationMs(totalScreenTimeMs)} screen time today'
+                                      : 'No active timer',
                       style: TextStyle(
                         color: isDeviceLocked
                             ? const Color(0xFFE53170)

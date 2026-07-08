@@ -43,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool hasPermission = false;
   bool isLoading = true;
   Timer? _pollTimer;
+  Timer? _countdownTimer;
   static const MethodChannel _channel = MethodChannel(
     'com.example.parental_control_app/usage',
   );
@@ -61,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _countdownTimer?.cancel();
     WebSocketService.instance.disconnect();
     DeviceLockService.instance.stopLockMonitor();
     super.dispose();
@@ -88,10 +90,12 @@ class _HomeScreenState extends State<HomeScreen> {
     ChildSettingsService.instance.onSettingsChanged = () {
       if (mounted) {
         setState(() {});
+        _restartCountdownTimer();
         if (hasPermission) loadUsageStats();
       }
     };
     await ChildSettingsService.instance.loadSettings();
+    _restartCountdownTimer();
     WebSocketService.instance.connect();
 
     if (!Platform.isAndroid) {
@@ -114,7 +118,23 @@ class _HomeScreenState extends State<HomeScreen> {
       (_) async {
       if (hasPermission) await loadUsageStats();
       await syncBrowsingToBackend();
+      await _tickCountdown();
     });
+  }
+
+  void _restartCountdownTimer() {
+    _countdownTimer?.cancel();
+    if (!ChildSettingsService.instance.hasTimeLimit) return;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tickCountdown());
+  }
+
+  Future<void> _tickCountdown() async {
+    if (!mounted) return;
+    final settings = ChildSettingsService.instance;
+    if (!settings.hasTimeLimit && settings.dailyTimeLimitMs == 0) return;
+
+    setState(() {});
+    await settings.checkTimeLimit();
   }
 
   Future<void> _checkProtectionStatus() async {
@@ -178,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
           usages = [];
           isLoading = false;
         });
-        await ChildSettingsService.instance.checkTimeLimit(0);
+        await ChildSettingsService.instance.checkTimeLimit();
         return;
       }
 
@@ -206,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }).toList()..sort((a, b) => b.totalMs.compareTo(a.totalMs));
 
       final totalMs = usageItems.fold<int>(0, (sum, u) => sum + u.totalMs);
-      await ChildSettingsService.instance.checkTimeLimit(totalMs);
+      await ChildSettingsService.instance.checkTimeLimit();
       setState(() {
         usages = usageItems;
         isLoading = false;
@@ -330,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final topApp = usages.isNotEmpty ? usages.first.displayName : 'None';
     final maxMs = usages.isNotEmpty ? usages.first.totalMs : 1;
     final settings = ChildSettingsService.instance;
-    final isLocked = settings.shouldLockDevice(totalMs);
+    final isLocked = settings.isDeviceLocked();
 
     return Stack(
       children: [
@@ -411,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ChildProtectionSetupCard(
                     onStatusChanged: _checkProtectionStatus,
                   ),
-                  if (ChildSettingsService.instance.isDeviceLocked(totalMs))
+                  if (ChildSettingsService.instance.isDeviceLocked())
                     _buildTimeUpBanner(),
                   _buildDashboardHeader(totalMs, totalApps, topApp),
                   if (ChildSettingsService.instance.hasTimeLimit)
@@ -587,7 +607,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Daily screen time limit reached. Device locked — ask your parent to unlock.',
+                  'Screen time allowance ended. Device locked — ask your parent to unlock.',
                   style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
                 ),
               ],
@@ -598,11 +618,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTimeLimitCard(int totalMs) {
+  Widget _buildTimeLimitCard(int _) {
     final settings = ChildSettingsService.instance;
-    final progress = settings.limitProgress(totalMs);
-    final remaining = settings.remainingMs(totalMs);
-    final overLimit = settings.isOverLimit(totalMs);
+    final progress = settings.limitProgress;
+    final remaining = settings.remainingMs;
+    final overLimit = settings.isOverLimit();
+    final elapsed = settings.elapsedLimitMs;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -623,7 +644,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'DAILY LIMIT',
+                'TIME REMAINING',
                 style: TextStyle(
                   color: Color(0xFFFF8906),
                   fontSize: 11,
@@ -633,12 +654,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Text(
                 overLimit
-                    ? 'Limit reached'
-                    : '${formatDurationMs(remaining)} left',
+                    ? 'Time\'s up!'
+                    : formatDurationMs(remaining),
                 style: TextStyle(
-                  color: overLimit ? const Color(0xFFE53170) : const Color(0xFFA7A9BE),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  color: overLimit ? const Color(0xFFE53170) : Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
@@ -657,7 +678,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            '${formatDurationMs(totalMs)} used of ${formatDurationMs(settings.dailyTimeLimitMs)}',
+            '${formatDurationMs(elapsed)} elapsed of ${formatDurationMs(settings.dailyTimeLimitMs)} allowance',
             style: const TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
           ),
         ],

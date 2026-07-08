@@ -263,7 +263,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _sectionTitle('Daily Screen Time Limit'),
+                    _sectionTitle('Screen Time Timer'),
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -272,13 +272,18 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                           children: [
                             Text(
                               limitMs == 0
-                                  ? 'No limit set'
-                                  : '${formatDurationMs(limitMs)} / day',
+                                  ? 'No timer set'
+                                  : '${formatDurationMs(limitMs)} countdown',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Timer starts when you save a new duration. Use 1m or 5m to test quickly.',
+                              style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
                             ),
                             const SizedBox(height: 12),
                             Wrap(
@@ -311,7 +316,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                             ),
                             const SizedBox(height: 8),
                             const Text(
-                              'Child gets a "Time\'s Up!" notification and in-app alert when they exceed this limit.',
+                              'Child gets locked when the countdown reaches zero.',
                               style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12),
                             ),
                             if (limitMs > 0) ...[
@@ -319,7 +324,7 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                               SwitchListTile(
                                 contentPadding: EdgeInsets.zero,
                                 title: const Text(
-                                  'Lock device when limit reached',
+                                  'Lock device when timer ends',
                                   style: TextStyle(color: Colors.white, fontSize: 14),
                                 ),
                                 subtitle: const Text(

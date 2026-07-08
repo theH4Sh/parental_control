@@ -14,7 +14,7 @@ class ChildSettingsService {
   static final ChildSettingsService instance = ChildSettingsService._();
 
   Map<String, dynamic>? _settings;
-  String? _limitNotifiedDate;
+  String? _limitNotifiedSession;
   VoidCallback? onSettingsChanged;
 
   Map<String, dynamic>? get settings => _settings;
@@ -22,7 +22,24 @@ class ChildSettingsService {
   bool get bedtimeEnabled => _settings?['bedtimeEnabled'] as bool? ?? false;
   bool get lockDeviceOnLimit => _settings?['lockDeviceOnLimit'] as bool? ?? true;
   bool get forceDeviceLock => _settings?['forceDeviceLock'] as bool? ?? false;
-  bool get hasTimeLimit => dailyTimeLimitMs > 0;
+  bool get hasTimeLimit => dailyTimeLimitMs > 0 && limitStartedAt != null;
+
+  DateTime? get limitStartedAt {
+    final raw = _settings?['limitStartedAt'];
+    if (raw == null) return null;
+    try {
+      return DateTime.parse(raw as String).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Wall-clock elapsed time since the parent started the current limit session.
+  int get elapsedLimitMs {
+    final started = limitStartedAt;
+    if (!hasTimeLimit || started == null) return 0;
+    return DateTime.now().difference(started).inMilliseconds.clamp(0, 1 << 31);
+  }
 
   bool get isUnlockedByParent {
     final until = _settings?['unlockUntil'];
@@ -50,26 +67,21 @@ class ChildSettingsService {
     return dt.millisecondsSinceEpoch;
   }
 
-  bool shouldLockDevice(int totalScreenTimeMs) {
+  bool shouldLockDevice() {
     if (isUnlockedByParent) return false;
     if (forceDeviceLock) return true;
-    return lockDeviceOnLimit && isOverLimit(totalScreenTimeMs);
+    return lockDeviceOnLimit && isOverLimit();
   }
 
-  bool isDeviceLocked(int totalScreenTimeMs) => shouldLockDevice(totalScreenTimeMs);
+  bool isDeviceLocked() => shouldLockDevice();
 
-  bool isOverLimit(int totalScreenTimeMs) =>
-      hasTimeLimit && totalScreenTimeMs >= dailyTimeLimitMs;
+  bool isOverLimit() => hasTimeLimit && elapsedLimitMs >= dailyTimeLimitMs;
 
-  int remainingMs(int totalScreenTimeMs) {
-    if (!hasTimeLimit) return 0;
-    return (dailyTimeLimitMs - totalScreenTimeMs).clamp(0, dailyTimeLimitMs);
-  }
+  int get remainingMs =>
+      hasTimeLimit ? (dailyTimeLimitMs - elapsedLimitMs).clamp(0, dailyTimeLimitMs) : 0;
 
-  double limitProgress(int totalScreenTimeMs) {
-    if (!hasTimeLimit) return 0;
-    return (totalScreenTimeMs / dailyTimeLimitMs).clamp(0.0, 1.0);
-  }
+  double get limitProgress =>
+      hasTimeLimit ? (elapsedLimitMs / dailyTimeLimitMs).clamp(0.0, 1.0) : 0.0;
 
   Future<void> loadSettings() async {
     try {
@@ -89,7 +101,7 @@ class ChildSettingsService {
   void _applySettings(Map<String, dynamic> settings) {
     _settings = settings;
     _updateBedtimeSchedule();
-    syncDeviceLock(0);
+    syncDeviceLock();
     onSettingsChanged?.call();
   }
 
@@ -108,32 +120,32 @@ class ChildSettingsService {
     }
   }
 
-  /// Returns true if a limit notification was shown.
-  Future<bool> checkTimeLimit(int totalScreenTimeMs) async {
-    await syncDeviceLock(totalScreenTimeMs);
-    if (!isOverLimit(totalScreenTimeMs)) return false;
+  /// Returns true if a limit notification was shown for the current session.
+  Future<bool> checkTimeLimit() async {
+    await syncDeviceLock();
+    if (!isOverLimit()) return false;
 
-    final today = DateTime.now().toIso8601String().substring(0, 10);
-    if (_limitNotifiedDate == today) return true;
+    final sessionKey = limitStartedAt?.toIso8601String();
+    if (sessionKey != null && _limitNotifiedSession == sessionKey) return true;
 
-    _limitNotifiedDate = today;
+    _limitNotifiedSession = sessionKey;
     await NotificationService.instance.show(
       title: '⏰ Time\'s Up!',
-      body: 'You\'ve reached your daily screen time limit. Your device is now locked.',
+      body: 'Your screen time allowance has ended. Your device is now locked.',
       payload: 'time_limit',
     );
     return true;
   }
 
-  Future<void> syncDeviceLock(int totalScreenTimeMs) async {
-    final shouldMonitor = lockDeviceOnLimit && (hasTimeLimit || forceDeviceLock);
+  Future<void> syncDeviceLock() async {
+    final shouldMonitor = lockDeviceOnLimit && (dailyTimeLimitMs > 0 || forceDeviceLock);
     if (!shouldMonitor) {
       await DeviceLockService.instance.stopLockMonitor();
       return;
     }
     await DeviceLockService.instance.syncLockState(
       dailyLimitMs: dailyTimeLimitMs,
-      totalUsedMs: totalScreenTimeMs,
+      totalUsedMs: elapsedLimitMs,
       lockEnabled: lockDeviceOnLimit,
       unlockUntilMs: unlockUntilMs,
       forceDeviceLock: forceDeviceLock,
@@ -174,6 +186,7 @@ class ParentControlService {
     String? unlockUntil,
     bool? forceDeviceLock,
     bool clearUnlock = false,
+    bool restartLimitTimer = false,
   }) async {
     final response = await http.put(
       Uri.parse('${ApiConfig.baseUrl}/auth/children/$childId/settings'),
@@ -187,6 +200,7 @@ class ParentControlService {
         if (unlockUntil != null) 'unlockUntil': unlockUntil,
         if (clearUnlock) 'unlockUntil': null,
         if (forceDeviceLock != null) 'forceDeviceLock': forceDeviceLock,
+        if (restartLimitTimer) 'restartLimitTimer': true,
       }),
     );
     final body = jsonDecode(response.body);

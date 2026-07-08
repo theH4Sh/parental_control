@@ -2,8 +2,6 @@ const express = require('express')
 const mongoose = require('mongoose')
 const UsageStats = require('../models/UsageStats')
 const User = require('../models/userModel')
-const ChildSettings = require('../models/ChildSettings')
-const { sendToUser } = require('../services/websocketService')
 
 const router = express.Router()
 
@@ -58,9 +56,6 @@ router.post('/usage-stats', async (req, res, next) => {
       })
     }
 
-    const existingBefore = await UsageStats.findOne({ deviceId, date })
-    const previousTotal = existingBefore?.totalScreenTimeMs ?? 0
-
     const doc = await UsageStats.findOneAndUpdate(
       { deviceId, date },
       {
@@ -72,28 +67,6 @@ router.post('/usage-stats', async (req, res, next) => {
       },
       { upsert: true, new: true, runValidators: true }
     )
-
-    // Notify child via WebSocket if they exceeded their daily limit
-    const childUser = await User.findOne({ deviceId, role: 'child' })
-    if (childUser) {
-      const settings = await ChildSettings.findOne({ childId: childUser._id })
-      if (
-        settings &&
-        settings.dailyTimeLimitMs > 0 &&
-        previousTotal < settings.dailyTimeLimitMs &&
-        totalScreenTimeMs >= settings.dailyTimeLimitMs
-      ) {
-        sendToUser(childUser._id, {
-          type: 'notification',
-          payload: {
-            title: '⏰ Time\'s Up!',
-            body: 'You\'ve reached your daily screen time limit. Please take a break and put your device away!',
-            notificationType: 'time_limit',
-            sentAt: new Date().toISOString(),
-          },
-        })
-      }
-    }
 
     res.status(200).json({
       success: true,
