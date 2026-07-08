@@ -40,7 +40,17 @@ const userSchema = new Schema({
     deviceId: {
         type: String,
         default: null
-    }
+    },
+    resetOtpHash: {
+        type: String,
+        default: null,
+        select: false,
+    },
+    resetOtpExpires: {
+        type: Date,
+        default: null,
+        select: false,
+    },
 }, { timestamps: true })
 
 // User SignUp

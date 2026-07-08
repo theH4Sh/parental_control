@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/auth_service.dart';
 
@@ -12,10 +13,17 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
+  final _codeController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
+  final _emailFormKey = GlobalKey<FormState>();
+  final _resetFormKey = GlobalKey<FormState>();
 
   bool _isLoading = false;
-  bool _emailSent = false;
+  bool _codeSent = false;
+  bool _resetComplete = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
 
   late AnimationController _animController;
   late Animation<double> _fadeIn;
@@ -40,21 +48,40 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   void dispose() {
     _animController.dispose();
     _emailController.dispose();
+    _codeController.dispose();
+    _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleForgotPassword() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _sendCode() async {
+    if (!_emailFormKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
     try {
-      await AuthService.instance.forgotPassword(
-        _emailController.text.trim(),
-      );
-
+      await AuthService.instance.forgotPassword(_emailController.text.trim());
       if (!mounted) return;
-      setState(() => _emailSent = true);
+      setState(() => _codeSent = true);
+    } catch (e) {
+      if (!mounted) return;
+      _showError(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    if (!_resetFormKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await AuthService.instance.resetPasswordWithCode(
+        email: _emailController.text.trim(),
+        code: _codeController.text.trim(),
+        newPassword: _passwordController.text,
+      );
+      if (!mounted) return;
+      setState(() => _resetComplete = true);
     } catch (e) {
       if (!mounted) return;
       _showError(e.toString().replaceFirst('Exception: ', ''));
@@ -66,21 +93,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(message,
-                  style: const TextStyle(color: Colors.white, fontSize: 14)),
-            ),
-          ],
-        ),
+        content: Text(message, style: const TextStyle(color: Colors.white)),
         backgroundColor: const Color(0xFFE74C3C),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -106,7 +123,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               opacity: _fadeIn,
               child: SlideTransition(
                 position: _slideUp,
-                child: _emailSent ? _buildSuccessView() : _buildFormView(),
+                child: _resetComplete
+                    ? _buildCompleteView()
+                    : _codeSent
+                        ? _buildResetView()
+                        : _buildEmailView(),
               ),
             ),
           ),
@@ -115,36 +136,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
     );
   }
 
-  Widget _buildFormView() {
+  Widget _buildEmailView() {
     return Form(
-      key: _formKey,
+      key: _emailFormKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Icon ──
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFFFF8906).withValues(alpha: 0.15),
-                  const Color(0xFFFF8906).withValues(alpha: 0.05),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(
-                color: const Color(0xFFFF8906).withValues(alpha: 0.2),
-                width: 2,
-              ),
-            ),
-            child: const Icon(
-              Icons.lock_reset_rounded,
-              size: 52,
-              color: Color(0xFFFF8906),
-            ),
-          ),
+          _iconCircle(Icons.lock_reset_rounded, const Color(0xFFFF8906)),
           const SizedBox(height: 28),
           const Text(
             'Forgot Password?',
@@ -152,253 +150,290 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen>
               fontSize: 28,
               fontWeight: FontWeight.w900,
               color: Colors.white,
-              letterSpacing: -0.5,
             ),
           ),
           const SizedBox(height: 12),
           const Text(
-            "Enter the email address associated with your account and we'll send you a link to reset your password.",
+            "Enter your email and we'll send you a 6-digit verification code to reset your password in the app.",
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFFA7A9BE),
-              height: 1.5,
-            ),
+            style: TextStyle(fontSize: 14, color: Color(0xFFA7A9BE), height: 1.5),
           ),
           const SizedBox(height: 36),
-
-          // ── Email Field ──
-          TextFormField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            style: const TextStyle(color: Colors.white, fontSize: 15),
-            cursorColor: const Color(0xFFFF8906),
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) {
-                return 'Enter your email';
-              }
-              final emailRegex = RegExp(
-                  r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
-              if (!emailRegex.hasMatch(v.trim())) {
-                return 'Enter a valid email address';
-              }
-              return null;
-            },
-            decoration: InputDecoration(
-              hintText: 'Email Address',
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
-                fontSize: 15,
-              ),
-              prefixIcon: const Icon(Icons.email_outlined,
-                  color: Color(0xFFA7A9BE), size: 22),
-              filled: true,
-              fillColor: const Color(0xFF1E1F29),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    const BorderSide(color: Color(0xFFFF8906), width: 1.5),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    const BorderSide(color: Color(0xFFE74C3C), width: 1.5),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide:
-                    const BorderSide(color: Color(0xFFE74C3C), width: 1.5),
-              ),
-              errorStyle:
-                  const TextStyle(color: Color(0xFFE74C3C), fontSize: 12),
-            ),
-          ),
+          _emailField(_emailController),
           const SizedBox(height: 28),
-
-          // ── Send Button ──
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _handleForgotPassword,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF8906),
-                foregroundColor: const Color(0xFF0F0E17),
-                disabledBackgroundColor:
-                    const Color(0xFFFF8906).withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                elevation: 0,
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFF0F0E17),
-                        ),
-                      ),
-                    )
-                  : const Text(
-                      'Send Reset Link',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-            ),
+          _primaryButton(
+            label: 'Send Verification Code',
+            onPressed: _sendCode,
           ),
           const SizedBox(height: 24),
-
-          // ── Back to Login ──
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.arrow_back_rounded,
-                    size: 16,
-                    color: Colors.white.withValues(alpha: 0.5)),
-                const SizedBox(width: 6),
-                Text(
-                  'Back to Login',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.5),
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _backToLoginLink(),
         ],
       ),
     );
   }
 
-  Widget _buildSuccessView() {
+  Widget _buildResetView() {
+    return Form(
+      key: _resetFormKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _iconCircle(Icons.pin_rounded, const Color(0xFFFF8906)),
+          const SizedBox(height: 28),
+          const Text(
+            'Enter Verification Code',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'We sent a 6-digit code to\n${_emailController.text.trim()}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFFA7A9BE), height: 1.5),
+          ),
+          const SizedBox(height: 32),
+          TextFormField(
+            controller: _codeController,
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 12,
+            ),
+            decoration: _inputDecoration(
+              hint: '000000',
+              icon: Icons.verified_outlined,
+              counterText: '',
+            ),
+            validator: (v) {
+              if (v == null || v.trim().length != 6) {
+                return 'Enter the 6-digit code from your email';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: _obscurePassword,
+            style: const TextStyle(color: Colors.white, fontSize: 15),
+            decoration: _inputDecoration(
+              hint: 'New password',
+              icon: Icons.lock_outline_rounded,
+              suffix: IconButton(
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                  color: const Color(0xFFA7A9BE),
+                  size: 20,
+                ),
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              ),
+            ),
+            validator: (v) {
+              if (v == null || v.length < 8) {
+                return 'Password must be at least 8 characters';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _confirmController,
+            obscureText: _obscureConfirm,
+            style: const TextStyle(color: Colors.white, fontSize: 15),
+            decoration: _inputDecoration(
+              hint: 'Confirm new password',
+              icon: Icons.lock_rounded,
+              suffix: IconButton(
+                icon: Icon(
+                  _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  color: const Color(0xFFA7A9BE),
+                  size: 20,
+                ),
+                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+              ),
+            ),
+            validator: (v) {
+              if (v != _passwordController.text) {
+                return 'Passwords do not match';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 8),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Use 8+ characters with uppercase, lowercase, number, and symbol.',
+              style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 11),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _primaryButton(
+            label: 'Reset Password',
+            onPressed: _resetPassword,
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: _isLoading ? null : _sendCode,
+            child: const Text(
+              'Resend code',
+              style: TextStyle(color: Color(0xFFFF8906)),
+            ),
+          ),
+          _backToLoginLink(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompleteView() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF2ECC71).withValues(alpha: 0.2),
-                const Color(0xFF2ECC71).withValues(alpha: 0.05),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            border: Border.all(
-              color: const Color(0xFF2ECC71).withValues(alpha: 0.3),
-              width: 2,
-            ),
-          ),
-          child: const Icon(
-            Icons.mark_email_read_rounded,
-            size: 56,
-            color: Color(0xFF2ECC71),
-          ),
-        ),
+        _iconCircle(Icons.check_circle_rounded, const Color(0xFF2ECC71)),
         const SizedBox(height: 28),
         const Text(
-          'Check Your Email',
+          'Password Reset!',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.w900,
             color: Colors.white,
-            letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 12),
-        Text(
-          'We sent a password reset link to\n${_emailController.text.trim()}',
+        const Text(
+          'Your password has been updated. You can now sign in with your new password.',
           textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xFFA7A9BE),
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1F29),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.05),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline_rounded,
-                  size: 20,
-                  color: Colors.white.withValues(alpha: 0.4)),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'The link will expire in 1 hour. Check your spam folder if you don\'t see the email.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFA7A9BE),
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          style: TextStyle(fontSize: 14, color: Color(0xFFA7A9BE), height: 1.5),
         ),
         const SizedBox(height: 32),
-        SizedBox(
-          width: double.infinity,
-          height: 54,
-          child: ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF8906),
-              foregroundColor: const Color(0xFF0F0E17),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              'Back to Login',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        GestureDetector(
-          onTap: () {
-            setState(() => _emailSent = false);
-          },
-          child: Text(
-            'Didn\'t receive the email? Try again',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
-              fontSize: 13,
-            ),
-          ),
+        _primaryButton(
+          label: 'Back to Login',
+          onPressed: () => Navigator.of(context).pop(),
         ),
       ],
+    );
+  }
+
+  Widget _iconCircle(IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [
+            color.withValues(alpha: 0.15),
+            color.withValues(alpha: 0.05),
+          ],
+        ),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 2),
+      ),
+      child: Icon(icon, size: 52, color: color),
+    );
+  }
+
+  Widget _emailField(TextEditingController controller) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: TextInputType.emailAddress,
+      style: const TextStyle(color: Colors.white, fontSize: 15),
+      validator: (v) {
+        if (v == null || v.trim().isEmpty) return 'Enter your email';
+        final emailRegex =
+            RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+        if (!emailRegex.hasMatch(v.trim())) return 'Enter a valid email address';
+        return null;
+      },
+      decoration: _inputDecoration(hint: 'Email Address', icon: Icons.email_outlined),
+    );
+  }
+
+  InputDecoration _inputDecoration({
+    required String hint,
+    required IconData icon,
+    Widget? suffix,
+    String counterText = '',
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 15),
+      prefixIcon: Icon(icon, color: const Color(0xFFA7A9BE), size: 22),
+      suffixIcon: suffix,
+      counterText: counterText,
+      filled: true,
+      fillColor: const Color(0xFF1E1F29),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFFF8906), width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFE74C3C), width: 1.5),
+      ),
+      errorStyle: const TextStyle(color: Color(0xFFE74C3C), fontSize: 12),
+    );
+  }
+
+  Widget _primaryButton({required String label, required VoidCallback onPressed}) {
+    return SizedBox(
+      width: double.infinity,
+      height: 54,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFFFF8906),
+          foregroundColor: const Color(0xFF0F0E17),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 0,
+        ),
+        child: _isLoading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F0E17)),
+                ),
+              )
+            : Text(
+                label,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+      ),
+    );
+  }
+
+  Widget _backToLoginLink() {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).pop(),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.arrow_back_rounded,
+              size: 16, color: Colors.white.withValues(alpha: 0.5)),
+          const SizedBox(width: 6),
+          Text(
+            'Back to Login',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

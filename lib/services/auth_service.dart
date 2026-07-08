@@ -102,21 +102,48 @@ class AuthService {
 
   // ─── Forgot Password ─────────────────────────────────────
 
-  /// Sends a password reset email.
+  /// Sends a 6-digit password reset code to the user's email.
   Future<String> forgotPassword(String email) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/forgot-password'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email}),
+      body: jsonEncode({'email': email.trim().toLowerCase()}),
     );
 
     final body = jsonDecode(response.body);
 
     if (response.statusCode == 200) {
-      return body['message'] as String? ?? 'Reset link sent';
+      return body['message'] as String? ?? 'Verification code sent';
     } else {
       throw Exception(
         body['error'] ?? body['message'] ?? 'Request failed',
+      );
+    }
+  }
+
+  /// Resets password using the email verification code.
+  Future<String> resetPasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email.trim().toLowerCase(),
+        'code': code.trim(),
+        'newPassword': newPassword,
+      }),
+    );
+
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return body['message'] as String? ?? 'Password reset successfully';
+    } else {
+      throw Exception(
+        body['error'] ?? body['message'] ?? 'Password reset failed',
       );
     }
   }

@@ -19,7 +19,7 @@ router.post('/login', loginUser);
 router.post('/signup', signUpUser);
 router.get('/verify/:token', verifyEmail);
 router.post('/forgot-password', forgotPassword);
-router.post('/reset-password/:token', resetPassword);
+router.post('/reset-password', resetPassword);
 
 // Protected routes — specific paths before /:username
 router.get('/me', requireAuth, isVerified, getProfile);

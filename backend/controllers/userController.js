@@ -100,24 +100,41 @@ const verifyEmail = async (req, res, next) => {
 const forgotPassword = async (req, res, next) => {
     try {
         const { email } = req.body
+        if (!email) return res.status(400).json({ error: 'Email is required' })
 
-        const user = await User.findOne({ email })
-        if (!user) return res.status(404).json({ message: "Email not found" })
-
-        const token = jwt.sign({ _id: user._id }, process.env.SECRET, { expiresIn: '1h' });
-        const resetLink = `http://localhost:8000/api/auth/reset-password/${token}`
-
-        const mail = {
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'Password Reset Request',
-            html: `<p>Click the link to reset your password:</p>
-             <a href="${resetLink}">${resetLink}</a>
-             <p>This link expires in 15 minutes.</p>`
+        const normalizedEmail = email.trim().toLowerCase()
+        const user = await User.findOne({ email: normalizedEmail }).select('+resetOtpHash +resetOtpExpires')
+        if (!user) {
+            return res.status(200).json({
+                message: 'If an account exists for this email, a verification code has been sent.',
+            })
         }
 
-        await transporter.sendMail(mail)
-        res.status(200).json({ message: "Password reset link sent to your email" })
+        const code = String(Math.floor(100000 + Math.random() * 900000))
+        const salt = await bcrypt.genSalt(10)
+        user.resetOtpHash = await bcrypt.hash(code, salt)
+        user.resetOtpExpires = new Date(Date.now() + 15 * 60 * 1000)
+        await user.save()
+
+        await transporter.sendMail({
+            from: `"Parental Control" <${process.env.EMAIL_USER}>`,
+            to: normalizedEmail,
+            subject: 'Your password reset code',
+            html: `
+                <h2>Password reset</h2>
+                <p>Hi ${user.username},</p>
+                <p>Your verification code is:</p>
+                <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px;">${code}</p>
+                <p>This code expires in 15 minutes.</p>
+                <p>If you didn't request this, you can ignore this email.</p>
+            `,
+        })
+
+        console.log(`Password reset code for ${normalizedEmail}: ${code}`)
+
+        res.status(200).json({
+            message: 'If an account exists for this email, a verification code has been sent.',
+        })
     } catch (error) {
         next(error)
     }
@@ -125,20 +142,35 @@ const forgotPassword = async (req, res, next) => {
 
 const resetPassword = async (req, res, next) => {
     try {
-        const { token } = req.params
-        const { newPassword } = req.body
+        const { email, code, newPassword } = req.body
 
-        if (!newPassword) return res.status(400).json({ error: "New password is required" })
+        if (!email || !code || !newPassword) {
+            return res.status(400).json({ error: 'Email, verification code, and new password are required' })
+        }
 
-        const decoded = jwt.verify(token, process.env.SECRET)
-        const user = await User.findById(decoded._id)
-        if (!user) return res.status(404).json({ error: 'Invalid token' })
+        const validator = require('validator')
+        if (!validator.isStrongPassword(newPassword)) {
+            return res.status(400).json({ error: 'Password is not strong enough' })
+        }
+
+        const normalizedEmail = email.trim().toLowerCase()
+        const user = await User.findOne({ email: normalizedEmail }).select('+resetOtpHash +resetOtpExpires')
+        if (!user) return res.status(400).json({ error: 'Invalid or expired verification code' })
+
+        if (!user.resetOtpHash || !user.resetOtpExpires || user.resetOtpExpires < new Date()) {
+            return res.status(400).json({ error: 'Verification code has expired. Request a new one.' })
+        }
+
+        const match = await bcrypt.compare(String(code).trim(), user.resetOtpHash)
+        if (!match) return res.status(400).json({ error: 'Invalid verification code' })
 
         const salt = await bcrypt.genSalt(10)
         user.password = await bcrypt.hash(newPassword, salt)
+        user.resetOtpHash = undefined
+        user.resetOtpExpires = undefined
         await user.save()
 
-        res.status(200).json({ message: "Password has been reset successfully" })
+        res.status(200).json({ message: 'Password has been reset successfully' })
     } catch (error) {
         next(error)
     }
