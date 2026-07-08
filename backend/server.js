@@ -34,8 +34,9 @@ app.get('/api/health', (req, res) => {
 
 // Error Handling
 app.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(err.status || 500).json({
+  console.error(err.stack || err.message || err)
+  const status = err.status || 500
+  res.status(status).json({
     success: false,
     message: err.message || 'Internal Server Error',
   })

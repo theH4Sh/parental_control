@@ -6,6 +6,7 @@ const { getChildSettings, updateChildSettings, getMySettings } = require('../con
 const { sendChildNotification } = require('../controllers/notificationController');
 const { getProfile, updateProfile, changePassword } = require('../controllers/profileController');
 const { getChildBrowsingHistory } = require('../controllers/browsingController');
+const { getChildAiInsights } = require('../controllers/aiInsightsController');
 const requireAuth = require('../middlewares/requireAuth');
 const isParent = require('../middlewares/isParent');
 const isChild = require('../middlewares/isChild');
@@ -33,6 +34,7 @@ router.put('/children/:childId/profile', requireAuth, isVerified, isParent, canA
 router.put('/children/:childId/password', requireAuth, isVerified, isParent, canAccessChild, resetChildPassword);
 router.post('/children/:childId/notify', requireAuth, isVerified, isParent, canAccessChild, sendChildNotification);
 router.get('/children/:childId/browsing-history', requireAuth, isVerified, isParent, canAccessChild, getChildBrowsingHistory);
+router.get('/children/:childId/ai-insights', requireAuth, isVerified, isParent, canAccessChild, getChildAiInsights);
 router.get('/my-settings', requireAuth, isVerified, isChild, getMySettings);
 router.get('/children', requireAuth, isVerified, isParent, getChildren);
 router.post('/children', requireAuth, isVerified, isParent, registerChild);

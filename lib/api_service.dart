@@ -155,6 +155,26 @@ class ApiService {
     }
   }
 
+  /// Fetches AI-generated activity insights for a child (parent-only).
+  Future<Map<String, dynamic>> getChildAiInsights(
+    String childId, {
+    String? date,
+  }) async {
+    final query = <String, String>{};
+    if (date != null) query['date'] = date;
+
+    final uri = Uri.parse('$_baseUrl/auth/children/$childId/ai-insights')
+        .replace(queryParameters: query.isEmpty ? null : query);
+
+    final response = await http.get(uri, headers: AuthService.instance.authHeaders);
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return body as Map<String, dynamic>;
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to fetch AI insights');
+  }
+
   /// Retrieves usage statistics for a specific device from the backend.
   Future<List<Map<String, dynamic>>> getUsageStats(String deviceId) async {
     final response = await http.get(

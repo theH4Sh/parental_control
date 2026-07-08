@@ -8,6 +8,7 @@ import 'child_account_screen.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart';
 import 'child_web_activity_screen.dart';
+import 'child_ai_insights_screen.dart';
 import '../widgets/device_access_dialog.dart';
 import '../utils/time_format.dart';
 import '../utils/limit_timer.dart';
@@ -795,6 +796,38 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final childId = child['childId']?.toString();
+                        if (childId == null || childId.isEmpty) return;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChildAiInsightsScreen(
+                              childId: childId,
+                              childName: childName,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.auto_awesome, color: Color(0xFF6246EA), size: 18),
+                      label: const Text(
+                        'AI Insights',
+                        style: TextStyle(
+                          color: Color(0xFF6246EA),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: const Color(0xFF6246EA).withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
