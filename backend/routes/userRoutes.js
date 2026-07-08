@@ -5,6 +5,7 @@ const { getChildrenUsageSummary } = require('../controllers/usageStatsController
 const { getChildSettings, updateChildSettings, getMySettings } = require('../controllers/childSettingsController');
 const { sendChildNotification } = require('../controllers/notificationController');
 const { getProfile, updateProfile, changePassword } = require('../controllers/profileController');
+const { getChildBrowsingHistory } = require('../controllers/browsingController');
 const requireAuth = require('../middlewares/requireAuth');
 const isParent = require('../middlewares/isParent');
 const isChild = require('../middlewares/isChild');
@@ -31,6 +32,7 @@ router.get('/children/:childId/profile', requireAuth, isVerified, isParent, canA
 router.put('/children/:childId/profile', requireAuth, isVerified, isParent, canAccessChild, updateChildProfile);
 router.put('/children/:childId/password', requireAuth, isVerified, isParent, canAccessChild, resetChildPassword);
 router.post('/children/:childId/notify', requireAuth, isVerified, isParent, canAccessChild, sendChildNotification);
+router.get('/children/:childId/browsing-history', requireAuth, isVerified, isParent, canAccessChild, getChildBrowsingHistory);
 router.get('/my-settings', requireAuth, isVerified, isChild, getMySettings);
 router.get('/children', requireAuth, isVerified, isParent, getChildren);
 router.post('/children', requireAuth, isVerified, isParent, registerChild);

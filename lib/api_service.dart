@@ -91,6 +91,52 @@ class ApiService {
     debugPrint('✅ Usage stats synced successfully');
   }
 
+  /// Uploads captured browsing events from the child device.
+  Future<int> syncBrowsingEvents({
+    required String deviceId,
+    required List<Map<String, dynamic>> events,
+  }) async {
+    if (events.isEmpty) return 0;
+
+    final payload = {
+      'deviceId': deviceId,
+      'events': events,
+    };
+
+    final response = await http.post(
+      Uri.parse('$_baseUrl/browsing-events'),
+      headers: AuthService.instance.authHeaders,
+      body: jsonEncode(payload),
+    );
+
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200) {
+      return body['inserted'] as int? ?? events.length;
+    }
+    throw Exception(body['message'] ?? 'Failed to sync browsing events');
+  }
+
+  /// Fetches browsing history for a child (parent-only).
+  Future<Map<String, dynamic>> getChildBrowsingHistory(
+    String childId, {
+    String? date,
+    int limit = 100,
+  }) async {
+    final query = <String, String>{'limit': limit.toString()};
+    if (date != null) query['date'] = date;
+
+    final uri = Uri.parse('$_baseUrl/auth/children/$childId/browsing-history')
+        .replace(queryParameters: query);
+
+    final response = await http.get(uri, headers: AuthService.instance.authHeaders);
+    final body = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return body as Map<String, dynamic>;
+    }
+    throw Exception(body['error'] ?? body['message'] ?? 'Failed to fetch browsing history');
+  }
+
   /// Fetches today's usage summary for all children (parent-only, requires auth).
   Future<Map<String, dynamic>> getChildrenUsageSummary({String? date}) async {
     final uri = date != null

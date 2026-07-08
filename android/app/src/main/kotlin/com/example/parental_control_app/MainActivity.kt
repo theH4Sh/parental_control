@@ -18,6 +18,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 	private val USAGE_CHANNEL = "com.example.parental_control_app/usage"
 	private val LOCK_CHANNEL = "com.example.parental_control_app/device_lock"
+	private val BROWSING_CHANNEL = "com.example.parental_control_app/browsing"
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
@@ -76,6 +77,17 @@ class MainActivity : FlutterActivity() {
 				"requestDeviceAdmin" -> {
 					startActivity(DeviceAdminHelper.createEnableIntent(this))
 					result.success(true)
+				}
+				else -> result.notImplemented()
+			}
+		}
+		MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BROWSING_CHANNEL).setMethodCallHandler { call, result ->
+			when (call.method) {
+				"getPendingBrowsingEvents" -> {
+					result.success(BrowsingEventStore.drain())
+				}
+				"getPendingBrowsingCount" -> {
+					result.success(BrowsingEventStore.pendingCount())
 				}
 				else -> result.notImplemented()
 			}

@@ -7,6 +7,7 @@ import 'child_control_screen.dart';
 import 'child_account_screen.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart';
+import 'child_web_activity_screen.dart';
 import '../widgets/device_access_dialog.dart';
 import '../utils/time_format.dart';
 import 'account_screen.dart';
@@ -789,6 +790,38 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        final childId = child['childId']?.toString();
+                        if (childId == null || childId.isEmpty) return;
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChildWebActivityScreen(
+                              childId: childId,
+                              childName: childName,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.language_rounded, color: Color(0xFFFF8906), size: 18),
+                      label: const Text(
+                        'Web Activity',
+                        style: TextStyle(
+                          color: Color(0xFFFF8906),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: const Color(0xFFFF8906).withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,

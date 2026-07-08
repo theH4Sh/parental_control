@@ -13,6 +13,15 @@ class AppLockAccessibilityService : AccessibilityService() {
 
 	override fun onAccessibilityEvent(event: AccessibilityEvent?) {
 		if (event == null) return
+		val packageName = event.packageName?.toString() ?: return
+
+		if (BrowserTrackingHelper.isBrowser(packageName) &&
+			(event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ||
+				event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
+		) {
+			BrowserTrackingHelper.captureFromService(this, packageName)
+		}
+
 		if (!DeviceLockState.shouldLockDevice()) return
 		if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
 			event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
@@ -20,7 +29,6 @@ class AppLockAccessibilityService : AccessibilityService() {
 			return
 		}
 
-		val packageName = event.packageName?.toString() ?: return
 		if (isAllowedPackage(packageName)) return
 
 		val now = System.currentTimeMillis()

@@ -7,6 +7,7 @@ require('dotenv').config()
 
 const userRoutes = require('./routes/userRoutes')
 const usageStatsRoutes = require('./routes/usageStats')
+const browsingRoutes = require('./routes/browsingRoutes')
 const { initWebSocket } = require('./services/websocketService')
 
 const app = express()
@@ -23,6 +24,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // API Routes
 app.use('/api', usageStatsRoutes)
+app.use('/api', browsingRoutes)
 app.use('/api/auth', userRoutes)
 
 // Health check

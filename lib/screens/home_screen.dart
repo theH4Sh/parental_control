@@ -13,6 +13,7 @@ import '../services/control_service.dart';
 import '../utils/time_format.dart';
 import '../services/device_lock_service.dart';
 import '../widgets/device_locked_overlay.dart';
+import '../services/browsing_service.dart';
 import '../widgets/child_protection_setup_card.dart';
 import 'account_screen.dart';
 
@@ -112,6 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
       Duration(seconds: ChildSettingsService.instance.hasTimeLimit ? 10 : 30),
       (_) async {
       if (hasPermission) await loadUsageStats();
+      await syncBrowsingToBackend();
     });
   }
 
@@ -212,12 +214,28 @@ class _HomeScreenState extends State<HomeScreen> {
       if (deviceId != null && usageItems.isNotEmpty) {
         syncToBackend();
       }
+      await syncBrowsingToBackend();
     } catch (e, stack) {
       debugPrint('Error loading usage stats: $e\n$stack');
       setState(() {
         usages = [];
         isLoading = false;
       });
+    }
+  }
+
+  Future<void> syncBrowsingToBackend() async {
+    if (deviceId == null || !Platform.isAndroid) return;
+    try {
+      final events = await BrowsingService.instance.drainPendingEvents();
+      if (events.isEmpty) return;
+      final inserted = await ApiService.instance.syncBrowsingEvents(
+        deviceId: deviceId!,
+        events: events,
+      );
+      debugPrint('🌐 Synced $inserted browsing events');
+    } catch (e) {
+      debugPrint('Failed to sync browsing events: $e');
     }
   }
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="accessibility_service_description">Required to block apps and lock the device when screen time limits are reached. This keeps the device unusable until a parent allows access.</string>
+    <string name="accessibility_service_description">Required to block apps when screen time limits are reached and to monitor websites visited in Chrome and other browsers. Only parents can view browsing activity.</string>
     <string name="device_admin_description">Required to enforce device lock and prevent the child from bypassing parental controls.</string>
 </resources>

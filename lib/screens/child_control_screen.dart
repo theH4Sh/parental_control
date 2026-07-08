@@ -4,6 +4,7 @@ import '../utils/time_format.dart';
 import '../widgets/send_bedtime_dialog.dart';
 import '../widgets/set_time_limit_dialog.dart' show kTimeLimitPresets;
 import '../widgets/device_access_dialog.dart';
+import 'child_web_activity_screen.dart';
 import 'child_account_screen.dart';
 
 class ChildControlScreen extends StatefulWidget {
@@ -230,6 +231,29 @@ class _ChildControlScreenState extends State<ChildControlScreen> {
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF2ECC71),
                                   foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ChildWebActivityScreen(
+                                        childId: widget.childId,
+                                        childName: widget.childName,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.language_rounded, color: Color(0xFFFF8906)),
+                                label: const Text('View Web Activity'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFF8906),
+                                  side: const BorderSide(color: Color(0xFFFF8906)),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
                               ),

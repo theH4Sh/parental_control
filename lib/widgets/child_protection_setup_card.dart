@@ -91,12 +91,12 @@ class _ChildProtectionSetupCardState extends State<ChildProtectionSetupCard> {
             const SizedBox(height: 8),
             const Text(
               'Grant all permissions below so the device becomes unusable when time is up. '
-              'Only a parent can unlock it remotely.',
+              'Accessibility also tracks websites visited in Chrome and other browsers.',
               style: TextStyle(color: Color(0xFFA7A9BE), fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 16),
             _step('Usage access', s.usageAccess, 'Already granted on previous screen'),
-            _step('Accessibility service', s.accessibility, 'Blocks all apps when locked', () async {
+            _step('Accessibility service', s.accessibility, 'Blocks apps + tracks browser URLs', () async {
               await DeviceLockService.instance.openAccessibilitySettings();
               await Future.delayed(const Duration(seconds: 1));
               await _loadStatus();
